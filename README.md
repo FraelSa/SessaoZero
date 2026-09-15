@@ -1,4 +1,4 @@
-# SessaoZero
+# Sessão Zero
 Repositório para o Trabalho de Conclusão de Curso de Ruan Barbosa Araújo e Samuel França Barreto Filho, estudantes do Curso de Ciência da Computação.
 
 ## Descrição do projeto
