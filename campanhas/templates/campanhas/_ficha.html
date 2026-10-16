@@ -1,0 +1,15 @@
+<article class="ficha">
+    <header class="ficha__topo">
+        <span class="ficha__sistema">{{ campanha.sistema_rpg }}</span>
+        <span class="tag tag--{{ campanha.status }}">{{ campanha.status|capfirst }}</span>
+    </header>
+    <div class="ficha__corpo">
+        <h3 class="ficha__titulo"><a href="{% url 'detalhe_campanha' campanha.id %}">{{ campanha.titulo }}</a></h3>
+        <p class="ficha__sinopse">{{ campanha.sinopse|truncatewords:28 }}</p>
+    </div>
+    <dl class="ficha__campos">
+        <div><dt>Mestre</dt><dd class="com-avatar"><img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' campanha.mestre_username %}" alt="" width="28" height="28" loading="lazy"><span>{{ campanha.mestre_username }}</span></dd></div>
+        <div><dt>Próxima sessão</dt><dd>{% if campanha.data_sessao %}{{ campanha.data_sessao|date:"d/m/Y, H:i" }}{% else %}A definir{% endif %}</dd></div>
+        <div><dt>Vagas</dt><dd>{% include "campanhas/_assentos.html" %}</dd></div>
+    </dl>
+</article>

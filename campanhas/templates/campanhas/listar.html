@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block titulo %}Campanhas - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="pagina-topo">
+        <h1>Campanhas</h1>
+        {% if usuario_logado %}
+            <a class="botao" href="{% url 'criar_campanha' %}">Criar campanha</a>
+        {% endif %}
+    </div>
+
+    <form class="filtro" method="get" action="{% url 'listar_campanhas' %}">
+        <div class="campo">
+            <label for="filtro-sistema">Sistema de RPG</label>
+            <select id="filtro-sistema" name="sistema">
+                <option value="">Todos os sistemas</option>
+                {% for sistema in sistemas %}
+                    <option value="{{ sistema }}"{% if sistema == sistema_filtro %} selected{% endif %}>{{ sistema }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button class="botao botao--secundario" type="submit">Filtrar</button>
+        {% if sistema_filtro %}<a href="{% url 'listar_campanhas' %}">Limpar filtro</a>{% endif %}
+    </form>
+
+    {% for campanha in campanhas %}
+        {% include "campanhas/_ficha.html" %}
+    {% empty %}
+        <p class="vazio">Nenhuma campanha{% if sistema_filtro %} de {{ sistema_filtro }}{% endif %} por enquanto.{% if usuario_logado %} Crie a primeira e convide jogadores.{% endif %}</p>
+    {% endfor %}
+{% endblock %}

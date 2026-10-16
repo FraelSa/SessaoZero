@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+
+{% block titulo %}Excluir campanha - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Excluir campanha</h1>
+        <form class="caixa" method="post">
+            {% csrf_token %}
+            <p>Tem certeza de que quer excluir <strong>{{ campanha.titulo }}</strong>? Os comentários e as inscrições dessa campanha serão perdidos. Essa ação não pode ser desfeita.</p>
+            <div class="acoes">
+                <button class="botao botao--perigo" type="submit">Excluir campanha</button>
+                <a class="botao botao--secundario" href="{% url 'detalhe_campanha' campanha.id %}">Cancelar</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

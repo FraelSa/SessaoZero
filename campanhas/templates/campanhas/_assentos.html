@@ -1,0 +1,2 @@
+<span class="assentos" role="img" aria-label="{{ campanha.vagas_livres }} de {{ campanha.max_jogadores }} vagas livres">{% for ocupado in campanha.assentos %}<span class="assento{% if ocupado %} assento--ocupado{% endif %}"></span>{% endfor %}</span>
+<span class="vagas__texto{% if campanha.vagas_livres == 0 %} vagas__texto--cheio{% endif %}">{% if campanha.vagas_livres == 0 %}Sem vagas{% else %}{{ campanha.vagas_livres }} livre{{ campanha.vagas_livres|pluralize }}{% endif %}</span>
