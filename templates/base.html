@@ -1,0 +1,169 @@
+{% load static %}<!DOCTYPE html>
+<html lang="pt-br" data-tema="escuro" data-texto="normal">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+        // Modo noturno é o padrão; só vira claro se a pessoa tiver desligado
+        // antes. O mesmo vale para "Texto maior" (padrão: desligado). Roda no
+        // <head> para a página não "piscar" ao carregar.
+        (function () {
+            var raiz = document.documentElement;
+            try {
+                if (localStorage.getItem("sessao-zero-tema") === "claro") raiz.setAttribute("data-tema", "claro");
+                if (localStorage.getItem("sessao-zero-texto") === "grande") raiz.setAttribute("data-texto", "grande");
+            } catch (e) {}
+        })();
+    </script>
+    <title>{% block titulo %}Sessão Zero{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;600;700&family=Young+Serif&display=swap">
+    <link rel="icon" type="image/svg+xml" href="{% static 'core/img/marca.svg' %}">
+    <link rel="stylesheet" href="{% static 'core/css/sessao_zero.css' %}">
+</head>
+<body>
+    <a class="pular" href="#conteudo">Ir para o conteúdo</a>
+
+    <header class="topo">
+        <div class="topo__miolo">
+            <a class="marca" href="{% url 'home' %}">
+                <svg class="marca__icone" viewBox="0 0 32 32" aria-hidden="true">
+                    <path d="M16 2l12 7v14l-12 7L4 23V9z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+                    <text class="marca__zero" x="16" y="21.5" text-anchor="middle" font-size="15" font-family="Young Serif, Georgia, serif">0</text>
+                </svg>
+                Sessão Zero
+            </a>
+
+            <div class="topo__acoes">
+                <nav class="nav" aria-label="Principal">
+                    <a href="{% url 'listar_campanhas' %}"{% if request.resolver_match.url_name == 'listar_campanhas' %} aria-current="page"{% endif %}>Campanhas</a>
+                    {% if usuario_logado %}
+                        <a href="{% url 'campanhas_recomendadas' %}"{% if request.resolver_match.url_name == 'campanhas_recomendadas' %} aria-current="page"{% endif %}>Recomendadas</a>
+                        <a href="{% url 'listar_notificacoes' %}"{% if request.resolver_match.url_name == 'listar_notificacoes' %} aria-current="page"{% endif %}>Notificações{% if total_notificacoes_nao_lidas %}<span class="contador" aria-label="{{ total_notificacoes_nao_lidas }} não lidas">{{ total_notificacoes_nao_lidas }}</span>{% endif %}</a>
+                    {% else %}
+                        <a href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} aria-current="page"{% endif %}>Entrar</a>
+                        <a class="botao" href="{% url 'cadastro' %}">Criar conta</a>
+                    {% endif %}
+                </nav>
+
+                <div class="menu" data-menu>
+                    {% if usuario_logado %}
+                        <button type="button" class="menu__botao" aria-expanded="false" aria-controls="painel-menu">
+                            <img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' usuario_logado.username %}?v={{ usuario_logado.avatar_versao }}" alt="" width="28" height="28">
+                            <span class="menu__nome">{{ usuario_logado.username }}</span>
+                            <svg class="menu__seta" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="menu__painel" id="painel-menu" hidden>
+                            <div class="menu__cabeca">
+                                <img class="avatar avatar--medio" src="{% url 'avatar_usuario' usuario_logado.username %}?v={{ usuario_logado.avatar_versao }}" alt="" width="48" height="48">
+                                <div class="menu__quem">
+                                    <strong>{{ usuario_logado.username }}</strong>
+                                    <span>{{ usuario_logado.email }}</span>
+                                </div>
+                            </div>
+                            <ul class="menu__lista">
+                                <li><a class="menu__link" href="{% url 'editar_perfil' %}">Meu perfil</a></li>
+                                <li><a class="menu__link" href="{% url 'editar_preferencias' %}">Preferências</a></li>
+                            </ul>
+                            {% include "partials/_acessibilidade.html" %}
+                            <div class="menu__rodape">
+                                <a class="menu__link" href="{% url 'logout' %}">Sair</a>
+                            </div>
+                        </div>
+                    {% else %}
+                        <button type="button" class="menu__botao" aria-label="Acessibilidade" aria-expanded="false" aria-controls="painel-menu">
+                            <svg class="menu__icone" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="7.2" r="1.7" fill="currentColor"/><path d="M6.5 10h11M12 10v4m0 0l-2.6 4.5M12 14l2.6 4.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            <span class="menu__nome menu__nome--rotulo">Acessibilidade</span>
+                            <svg class="menu__seta" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </button>
+                        <div class="menu__painel" id="painel-menu" hidden>
+                            {% include "partials/_acessibilidade.html" %}
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main id="conteudo" class="conteudo">
+        {% if messages %}
+            <ul class="mensagens" role="status">
+                {% for message in messages %}
+                    <li class="mensagem {{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        {% block conteudo %}{% endblock %}
+    </main>
+
+    <footer class="rodape">
+        <div class="rodape__miolo">
+            <p>Sessão Zero. Projeto de TCC do curso de Computação da Unijorge, 2026.</p>
+        </div>
+    </footer>
+
+    <script>
+        (function () {
+            var raiz = document.documentElement;
+
+            // Chaves de acessibilidade (modo noturno e texto maior). A escolha
+            // fica salva no navegador e vale até a pessoa mudar de novo.
+            var CONFIG = {
+                tema:  { atributo: "data-tema",  ligado: "escuro", desligado: "claro",  armazem: "sessao-zero-tema" },
+                texto: { atributo: "data-texto", ligado: "grande", desligado: "normal", armazem: "sessao-zero-texto" }
+            };
+            var chaves = document.querySelectorAll("[data-chave]");
+
+            function estaLigada(nome) {
+                return raiz.getAttribute(CONFIG[nome].atributo) === CONFIG[nome].ligado;
+            }
+            function sincronizar() {
+                chaves.forEach(function (chave) {
+                    chave.setAttribute("aria-checked", estaLigada(chave.dataset.chave) ? "true" : "false");
+                });
+            }
+            chaves.forEach(function (chave) {
+                chave.addEventListener("click", function () {
+                    var cfg = CONFIG[chave.dataset.chave];
+                    var novo = estaLigada(chave.dataset.chave) ? cfg.desligado : cfg.ligado;
+                    raiz.setAttribute(cfg.atributo, novo);
+                    try { localStorage.setItem(cfg.armazem, novo); } catch (e) {}
+                    sincronizar();
+                });
+            });
+            sincronizar();
+
+            // Menu do perfil (ou de acessibilidade, para quem não entrou).
+            var menu = document.querySelector("[data-menu]");
+            if (!menu) return;
+            var botao = menu.querySelector(".menu__botao");
+            var painel = menu.querySelector(".menu__painel");
+
+            function abrir() {
+                painel.hidden = false;
+                botao.setAttribute("aria-expanded", "true");
+            }
+            function fechar(devolverFoco) {
+                painel.hidden = true;
+                botao.setAttribute("aria-expanded", "false");
+                if (devolverFoco) botao.focus();
+            }
+
+            botao.addEventListener("click", function () {
+                if (painel.hidden) abrir(); else fechar(false);
+            });
+            document.addEventListener("click", function (evento) {
+                if (!menu.contains(evento.target)) fechar(false);
+            });
+            document.addEventListener("keydown", function (evento) {
+                if (evento.key === "Escape" && !painel.hidden) fechar(true);
+            });
+            menu.addEventListener("focusout", function (evento) {
+                if (evento.relatedTarget && !menu.contains(evento.relatedTarget)) fechar(false);
+            });
+        })();
+    </script>
+</body>
+</html>

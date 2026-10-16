@@ -1,0 +1,26 @@
+{% if form.non_field_errors %}
+    <p class="campo__erro" role="alert">{{ form.non_field_errors|striptags }}</p>
+{% endif %}
+{% for field in form %}
+    {% if field.widget_type == "checkboxselectmultiple" %}
+        <fieldset class="campo">
+            <legend>{{ field.label }}</legend>
+            <div class="opcoes">{{ field }}</div>
+            {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
+            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+        </fieldset>
+    {% elif field.widget_type == "checkbox" %}
+        <div class="campo">
+            <label class="opcao-unica" for="{{ field.id_for_label }}">{{ field }}<span>{{ field.label }}</span></label>
+            {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
+            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+        </div>
+    {% else %}
+        <div class="campo">
+            <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
+            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+        </div>
+    {% endif %}
+{% endfor %}
