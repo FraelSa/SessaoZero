@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block titulo %}Reenviar confirmação - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Confirmar e-mail</h1>
+        <form class="caixa" method="post" novalidate>
+            {% csrf_token %}
+            <p>Informe o e-mail do seu cadastro e enviaremos um novo link de confirmação. Olhe também a caixa de spam.</p>
+            {% include "partials/_form_campos.html" %}
+            <div class="acoes">
+                <button class="botao botao--cheio" type="submit">Enviar novo link</button>
+            </div>
+        </form>
+        <p class="painel__rodape"><a href="{% url 'login' %}">Voltar para o login</a></p>
+    </section>
+{% endblock %}
