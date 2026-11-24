@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+
+{% block titulo %}Recomendadas para você - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="pagina-topo">
+        <h1>Recomendadas para você</h1>
+    </div>
+
+    {% if not tem_perfil %}
+        <p class="vazio">
+            Você ainda não tem preferências nem histórico de campanhas, então
+            mostramos as mais recentes. Cadastre suas
+            <a href="{% url 'editar_preferencias' %}">preferências</a> para
+            receber recomendações mais certeiras.
+        </p>
+    {% endif %}
+
+    {% for campanha in campanhas %}
+        {% include "campanhas/_ficha.html" %}
+    {% empty %}
+        <p class="vazio">Nenhuma campanha disponível para recomendar no momento.</p>
+    {% endfor %}
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block titulo %}Perfil - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel painel--larga">
+        <h1>Perfil</h1>
+        <form class="caixa" method="post" enctype="multipart/form-data" novalidate>
+            {% csrf_token %}
+
+            <div class="perfil__topo">
+                <img class="avatar avatar--grande" src="{% url 'avatar_usuario' usuario.username %}?v={{ usuario.avatar_versao }}" alt="Seu avatar atual" width="88" height="88">
+                <div>
+                    <p class="perfil__nome">{{ usuario.username }}</p>
+                    <p class="campo__ajuda">{{ usuario.email }}</p>
+                </div>
+            </div>
+
+            <fieldset class="campo">
+                <legend>Escolha um avatar</legend>
+                <div class="avatares">
+                    {% for opcao in opcoes_avatar %}
+                        <label class="avatar-opcao">
+                            <input type="radio" name="avatar" value="{{ opcao.valor }}"{% if opcao.valor == avatar_escolhido %} checked{% endif %}>
+                            <img class="avatar avatar--medio" src="{{ opcao.src }}" alt="" width="64" height="64">
+                            <span>{{ opcao.nome }}</span>
+                        </label>
+                    {% endfor %}
+                </div>
+                {% if form.avatar.errors %}<p class="campo__erro">{{ form.avatar.errors|striptags }}</p>{% endif %}
+            </fieldset>
+
+            <div class="campo">
+                <label for="{{ form.foto.id_for_label }}">{{ form.foto.label }}</label>
+                {{ form.foto }}
+                <p class="campo__ajuda">{{ form.foto.help_text }}</p>
+                {% if form.foto.errors %}<p class="campo__erro">{{ form.foto.errors|striptags }}</p>{% endif %}
+            </div>
+
+            <div class="acoes">
+                <button class="botao" type="submit">Salvar perfil</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

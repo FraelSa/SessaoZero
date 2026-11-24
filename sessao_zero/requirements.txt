@@ -1,0 +1,20 @@
+Django>=5.0,<5.3
+mongoengine>=0.29
+python-decouple>=3.8
+dnspython>=2.6
+
+# RF05 - recomendação de campanhas por similaridade de texto (TF-IDF)
+scikit-learn>=1.4
+
+# RF07 (parte de chat) - WebSockets para o chat em tempo real das campanhas
+channels>=4.0
+# Servidor ASGI necessário para os WebSockets do chat (e, quando listado em
+# INSTALLED_APPS, faz o `manage.py runserver` aceitar WebSocket também)
+daphne>=4.0
+# Em produção, troque o CHANNEL_LAYERS em settings.py para usar Redis em
+# vez do InMemoryChannelLayer (que só funciona dentro de 1 processo) e
+# descomente a linha abaixo:
+# channels-redis>=4.2
+
+# Foto de perfil: validar, recortar e reduzir as imagens enviadas
+Pillow>=10.0

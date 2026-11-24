@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% load horario %}
+
+{% block titulo %}Chat - {{ campanha.titulo }}{% endblock %}
+
+{% block conteudo %}
+    <a class="voltar" href="{% url 'detalhe_campanha' campanha.id %}">Voltar para a campanha</a>
+    <h1>Chat: {{ campanha.titulo }}</h1>
+
+    <div class="chat">
+        <div id="mensagens" class="chat__lista" role="log" aria-live="polite" aria-label="Mensagens do chat">
+            {% for mensagem in historico %}
+                <div class="msg{% if mensagem.autor_username == usuario.username %} msg--minha{% endif %}">
+                    <div class="msg__cabeca">
+                        <img class="avatar avatar--mini" src="{% url 'avatar_usuario' mensagem.autor_username %}" alt="" width="24" height="24" loading="lazy">
+                        <span class="msg__autor">{{ mensagem.autor_username }}</span><span class="msg__hora">{{ mensagem.criado_em|local|date:"H:i" }}</span>
+                    </div>
+                    <p class="msg__texto">{{ mensagem.texto }}</p>
+                </div>
+            {% empty %}
+                <p class="chat__vazio" id="chat-vazio">Nenhuma mensagem ainda. Mande a primeira.</p>
+            {% endfor %}
+        </div>
+
+        <p id="erro-chat" class="campo__erro" role="alert" hidden></p>
+
+        <form id="form-mensagem" class="chat__form">
+            <label class="visualmente-oculto" for="campo-texto">Mensagem</label>
+            <input type="text" id="campo-texto" maxlength="1000" placeholder="Escreva uma mensagem" autocomplete="off" required>
+            <button class="botao" type="submit">Enviar</button>
+        </form>
+    </div>
+
+    <script>
+        (function () {
+            const campanhaId = "{{ campanha.id }}";
+            const meuNome = "{{ usuario.username|escapejs }}";
+            // Endereço-base dos avatares (a URL termina com o nome do usuário).
+            const urlAvatar = "{% url 'avatar_usuario' 'x' %}".replace(/x\/$/, "");
+            const protocolo = window.location.protocol === "https:" ? "wss://" : "ws://";
+            const socket = new WebSocket(protocolo + window.location.host + "/ws/chat/" + campanhaId + "/");
+
+            const lista = document.getElementById("mensagens");
+            const formulario = document.getElementById("form-mensagem");
+            const campo = document.getElementById("campo-texto");
+            const erro = document.getElementById("erro-chat");
+
+            function mostrarErro(texto) {
+                erro.textContent = texto;
+                erro.hidden = false;
+            }
+
+            function limparErro() {
+                erro.textContent = "";
+                erro.hidden = true;
+            }
+
+            // Monta a mensagem com textContent (e não innerHTML), para que
+            // nomes ou textos com HTML nunca sejam interpretados como código.
+            function adicionarMensagem(autor, hora, texto) {
+                const aviso = document.getElementById("chat-vazio");
+                if (aviso) aviso.remove();
+
+                const caixa = document.createElement("div");
+                caixa.className = "msg" + (autor === meuNome ? " msg--minha" : "");
+
+                const foto = document.createElement("img");
+                foto.className = "avatar avatar--mini";
+                foto.src = urlAvatar + encodeURIComponent(autor) + "/";
+                foto.alt = "";
+                foto.width = 24;
+                foto.height = 24;
+
+                const nome = document.createElement("span");
+                nome.className = "msg__autor";
+                nome.textContent = autor;
+
+                const quando = document.createElement("span");
+                quando.className = "msg__hora";
+                quando.textContent = hora;
+
+                const cabeca = document.createElement("div");
+                cabeca.className = "msg__cabeca";
+                cabeca.append(foto, nome, quando);
+
+                const corpo = document.createElement("p");
+                corpo.className = "msg__texto";
+                corpo.textContent = texto;
+
+                caixa.append(cabeca, corpo);
+                lista.appendChild(caixa);
+                lista.scrollTop = lista.scrollHeight;
+            }
+
+            socket.onmessage = function (evento) {
+                const dados = JSON.parse(evento.data);
+                if (dados.tipo === "erro") {
+                    mostrarErro(dados.motivo);
+                    return;
+                }
+                limparErro();
+                adicionarMensagem(dados.autor_username, dados.criado_em, dados.texto);
+            };
+
+            socket.onclose = function () {
+                mostrarErro("A conexão com o chat foi encerrada. Recarregue a página para tentar de novo.");
+            };
+
+            formulario.addEventListener("submit", function (evento) {
+                evento.preventDefault();
+                const texto = campo.value.trim();
+                if (!texto) return;
+                if (socket.readyState !== WebSocket.OPEN) {
+                    mostrarErro("Sem conexão com o chat. Recarregue a página.");
+                    return;
+                }
+                socket.send(JSON.stringify({ texto: texto }));
+                campo.value = "";
+            });
+
+            lista.scrollTop = lista.scrollHeight;
+        })();
+    </script>
+{% endblock %}

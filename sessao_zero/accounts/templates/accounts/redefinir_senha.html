@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block titulo %}Escolher nova senha - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Escolher nova senha</h1>
+        <form class="caixa" method="post" novalidate>
+            {% csrf_token %}
+            {% include "partials/_form_campos.html" %}
+            <div class="acoes">
+                <button class="botao botao--cheio" type="submit">Salvar nova senha</button>
+            </div>
+        </form>
+    </section>
+{% endblock %}

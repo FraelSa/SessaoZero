@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% load horario %}
+
+{% block titulo %}{{ campanha.titulo }} - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="detalhe">
+        <div class="detalhe__cabeca">
+            <a class="voltar" href="{% url 'listar_campanhas' %}">Voltar para as campanhas</a>
+
+            <h1>{{ campanha.titulo }}</h1>
+            <p>
+                <span class="tag tag--{{ campanha.status }}">{{ campanha.status|capfirst }}</span>
+                <span class="detalhe__sistema">{{ campanha.sistema_rpg }}</span>
+            </p>
+
+            <div class="texto-corrido">{{ campanha.sinopse|linebreaks }}</div>
+        </div>
+
+        <section class="detalhe__comentarios" aria-labelledby="titulo-comentarios">
+                <h2 id="titulo-comentarios">Comentários</h2>
+
+                {% if usuario_logado %}
+                    <form class="form-comentario" method="post" action="{% url 'comentar_campanha' campanha.id %}">
+                        {% csrf_token %}
+                        <label class="visualmente-oculto" for="id_texto">Escreva um comentário</label>
+                        {{ comentario_form.texto }}
+                        <button class="botao" type="submit">Comentar</button>
+                    </form>
+                {% else %}
+                    <p><a href="{% url 'login' %}">Entre</a> para comentar.</p>
+                {% endif %}
+
+                <ul class="comentarios">
+                    {% for comentario in campanha.comentarios|dictsortreversed:"criado_em" %}
+                        <li class="comentario{% if comentario.autor_email == campanha.mestre_email %} comentario--mestre{% endif %}">
+                            <div class="comentario__cabeca">
+                                <span class="comentario__quem">
+                                    <img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' comentario.autor_username %}" alt="" width="28" height="28" loading="lazy">
+                                    <span class="comentario__autor">{{ comentario.autor_username }}</span>
+                                </span>
+                                {% if comentario.autor_email == campanha.mestre_email %}<span class="selo">mestre</span>{% endif %}
+                                <span class="comentario__data">{{ comentario.criado_em|local|date:"d/m/Y, H:i" }}</span>
+                            </div>
+                            <p>{{ comentario.texto|linebreaksbr }}</p>
+                        </li>
+                    {% empty %}
+                        <li class="vazio">Nenhum comentário ainda.</li>
+                    {% endfor %}
+                </ul>
+        </section>
+
+        <aside class="lateral" aria-label="Ficha da campanha">
+            <div class="ficha">
+                <header class="ficha__topo">
+                    <span class="ficha__sistema">Ficha da mesa</span>
+                </header>
+                <dl class="ficha__campos ficha__campos--coluna">
+                    <div><dt>Mestre</dt><dd class="com-avatar"><img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' campanha.mestre_username %}" alt="" width="28" height="28"><span>{{ campanha.mestre_username }}</span></dd></div>
+                    <div><dt>Próxima sessão</dt><dd>{% if campanha.data_sessao %}{{ campanha.data_sessao|date:"d/m/Y, H:i" }}{% else %}A definir{% endif %}</dd></div>
+                    <div><dt>Vagas</dt><dd>{% include "campanhas/_assentos.html" %}</dd></div>
+                </dl>
+
+                <div class="ficha__acoes">
+                    {% if eh_mestre %}
+                        <a class="botao" href="{% url 'sala_chat' campanha.id %}">Abrir o chat</a>
+                        <a class="botao botao--secundario" href="{% url 'editar_campanha' campanha.id %}">Editar campanha</a>
+                        <a class="botao botao--perigo-contorno" href="{% url 'excluir_campanha' campanha.id %}">Excluir campanha</a>
+                    {% elif usuario_logado %}
+                        {% if ja_inscrito %}
+                            <a class="botao" href="{% url 'sala_chat' campanha.id %}">Abrir o chat</a>
+                            <p class="campo__ajuda">Você está inscrito(a) nesta campanha.</p>
+                        {% else %}
+                            <form method="post" action="{% url 'inscrever_campanha' campanha.id %}">
+                                {% csrf_token %}
+                                <button class="botao botao--cheio" type="submit"{% if campanha.vagas_livres == 0 %} disabled{% endif %}>
+                                    {% if campanha.vagas_livres == 0 %}Sem vagas{% else %}Inscrever-me{% endif %}
+                                </button>
+                            </form>
+                        {% endif %}
+                    {% else %}
+                        <p><a href="{% url 'login' %}">Entre</a> para se inscrever nesta campanha.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </aside>
+    </div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block conteudo %}
+    <section class="hero">
+        <div class="hero__texto">
+            <h1>Encontre uma mesa de RPG para jogar</h1>
+            <p>Publique a sua campanha ou entre em uma mesa que combine com o seu jeito de jogar. Mestres e jogadores se encontram aqui, combinam a data e conversam no chat de cada mesa.</p>
+            <div class="hero__acoes">
+                <a class="botao" href="{% url 'listar_campanhas' %}">Ver campanhas abertas</a>
+                {% if usuario_logado %}
+                    <a class="botao botao--secundario" href="{% url 'criar_campanha' %}">Criar campanha</a>
+                {% else %}
+                    <a class="botao botao--secundario" href="{% url 'cadastro' %}">Criar conta</a>
+                {% endif %}
+            </div>
+        </div>
+
+        <svg class="hero__mesa" viewBox="0 0 240 240" role="img" aria-label="Mesa redonda com cinco cadeiras: quatro ocupadas e uma livre">
+            <circle class="mesa-tampo" cx="120" cy="120" r="62" stroke="currentColor" stroke-width="3"/>
+            <text class="mesa-zero" x="120" y="140" text-anchor="middle" font-size="58" font-family="Young Serif, Georgia, serif">0</text>
+            <circle cx="120" cy="28" r="15" fill="currentColor"/>
+            <circle cx="207.5" cy="91.6" r="15" fill="currentColor"/>
+            <circle cx="174.1" cy="194.4" r="15" fill="currentColor"/>
+            <circle cx="65.9" cy="194.4" r="15" fill="currentColor"/>
+            <circle class="cadeira-livre" cx="32.5" cy="91.6" r="15" fill="none" stroke-width="3" stroke-dasharray="5 5"/>
+        </svg>
+    </section>
+
+    <section aria-labelledby="titulo-abertas">
+        <div class="secao-cabecalho">
+            <h2 id="titulo-abertas">Campanhas abertas agora</h2>
+            <a href="{% url 'listar_campanhas' %}">Ver todas</a>
+        </div>
+
+        {% for campanha in campanhas_recentes %}
+            {% include "campanhas/_ficha.html" %}
+        {% empty %}
+            <p class="vazio">Nenhuma campanha aberta por enquanto. <a href="{% url 'criar_campanha' %}">Crie a primeira</a> e convide jogadores.</p>
+        {% endfor %}
+    </section>
+{% endblock %}

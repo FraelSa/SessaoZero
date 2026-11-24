@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% load horario %}
+
+{% block titulo %}Notificações - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel painel--larga">
+        <h1>Notificações</h1>
+
+        <ul class="notificacoes">
+            {% for notificacao in notificacoes %}
+                <li class="notificacao">
+                    <p>{% if notificacao.url %}<a href="{% url 'ir_para_notificacao' notificacao.id %}">{{ notificacao.texto }}</a>{% else %}{{ notificacao.texto }}{% endif %}</p>
+                    <span class="notificacao__data">{{ notificacao.criado_em|local|date:"d/m/Y, H:i" }}</span>
+                </li>
+            {% empty %}
+                <li class="vazio">Você não tem notificações. Elas aparecem aqui quando uma campanha sua, ou da qual você participa, muda.</li>
+            {% endfor %}
+        </ul>
+    </section>
+{% endblock %}
