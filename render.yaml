@@ -1,0 +1,41 @@
+# Configuração do site no Render (https://render.com), lida pelo botão
+# "New > Blueprint". O passo a passo completo está em sessao_zero/DEPLOY.md.
+services:
+  - type: web
+    name: sessao-zero
+    runtime: python
+    plan: free
+    # O projeto Django completo fica na pasta sessao_zero/ do repositório.
+    rootDir: sessao_zero
+    buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
+    # O disco do Render é apagado a cada reinício, então as tabelas internas do
+    # Django (SQLite) são recriadas aqui. O daphne atende HTTP e o WebSocket do chat.
+    startCommand: python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT --proxy-headers sessao_zero.asgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: DJANGO_DEBUG
+        value: "False"
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+      - key: MONGO_DB_NAME
+        value: sessao_zero
+      # As variáveis abaixo são pedidas na hora de criar o Blueprint.
+      # String de conexão do MongoDB Atlas (mongodb+srv://...)
+      - key: MONGO_URI
+        sync: false
+      # Seu domínio, separado por vírgula: seusite.com.br,www.seusite.com.br
+      - key: DJANGO_ALLOWED_HOSTS
+        sync: false
+      # O mesmo domínio com https://: https://seusite.com.br,https://www.seusite.com.br
+      - key: DJANGO_CSRF_TRUSTED_ORIGINS
+        sync: false
+      # Endereço usado nos links dos e-mails: https://seusite.com.br
+      - key: SITE_URL
+        sync: false
+      # Chave de API da Brevo (não a chave SMTP)
+      - key: BREVO_API_KEY
+        sync: false
+      # Remetente no domínio autenticado na Brevo: Sessão Zero <naoresponda@seusite.com.br>
+      - key: DEFAULT_FROM_EMAIL
+        sync: false

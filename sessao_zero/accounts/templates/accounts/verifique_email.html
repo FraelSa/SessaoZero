@@ -8,7 +8,7 @@
         <div class="caixa">
             <p>Enviamos um link de confirmação para <strong>{{ email }}</strong>. Abra o e-mail e clique no link para criar a sua conta. Ele vale por 24 horas.</p>
             {% if email_no_terminal %}
-                <p class="mensagem">Modo de desenvolvimento: o e-mail não vai para a caixa de entrada. Ele aparece no terminal onde o servidor está rodando. Para enviar de verdade, configure o SMTP no arquivo .env.</p>
+                <p class="mensagem">Modo de desenvolvimento: o e-mail não vai para a caixa de entrada. Ele aparece no terminal onde o servidor está rodando. Para enviar de verdade, configure o SMTP ou a BREVO_API_KEY no arquivo .env.</p>
             {% endif %}
             <p class="campo__ajuda">Não chegou? Olhe a caixa de spam ou peça um novo link.</p>
             <form method="post">

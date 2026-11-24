@@ -83,6 +83,14 @@ os dois entram em `/chat/<id>/`.
    `http://127.0.0.1:8000/status/mongo/` para confirmar que a conexão com
    o MongoDB está funcionando (deve responder `"conectado": true`).
 
+## Publicar na internet
+
+A Hospedagem Web da Hostinger não roda Python (por isso o erro 403). O site é
+publicado no Render (grátis), com o banco no MongoDB Atlas, os e-mails pela
+Brevo e o domínio continuando na Hostinger. O passo a passo está em
+[`DEPLOY.md`](DEPLOY.md), e a configuração do Render em `render.yaml`, na raiz
+do repositório.
+
 ## Testando os modelos rapidamente
 
 Com o servidor configurado, dá pra brincar com os documentos direto pelo

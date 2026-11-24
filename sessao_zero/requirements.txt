@@ -18,3 +18,8 @@ daphne>=4.0
 
 # Foto de perfil: validar, recortar e reduzir as imagens enviadas
 Pillow>=10.0
+
+# Produção (Render): servir CSS/imagens sem nginx e enviar e-mail pela API
+# da Brevo (o plano grátis do Render bloqueia o SMTP do Gmail)
+whitenoise>=6.6
+django-anymail>=12.0
