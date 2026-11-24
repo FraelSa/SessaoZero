@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 
 from decouple import Csv, config
+from django.core.exceptions import ImproperlyConfigured
 from mongoengine import connect
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -22,9 +23,34 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # --------------------------------------------------------------------------
 # Segurança / básico
 # --------------------------------------------------------------------------
-SECRET_KEY = config("DJANGO_SECRET_KEY", default="troque-esta-chave-em-producao")
+_CHAVE_PADRAO = "troque-esta-chave-em-producao"
+SECRET_KEY = config("DJANGO_SECRET_KEY", default=_CHAVE_PADRAO)
 DEBUG = config("DJANGO_DEBUG", default=True, cast=bool)
 ALLOWED_HOSTS = config("DJANGO_ALLOWED_HOSTS", default="localhost,127.0.0.1", cast=Csv())
+
+# Endereços (com https://) de onde formulários podem ser enviados. Em
+# produção, coloque o domínio do site, ex.: https://seusite.com.br
+CSRF_TRUSTED_ORIGINS = config("DJANGO_CSRF_TRUSTED_ORIGINS", default="", cast=Csv())
+
+# O Render informa sozinho o endereço *.onrender.com do serviço; assim ele
+# funciona sem precisar repetir esse endereço nas variáveis acima.
+_HOST_RENDER = os.environ.get("RENDER_EXTERNAL_HOSTNAME")
+if _HOST_RENDER:
+    ALLOWED_HOSTS.append(_HOST_RENDER)
+    CSRF_TRUSTED_ORIGINS.append(f"https://{_HOST_RENDER}")
+
+if not DEBUG:
+    if SECRET_KEY == _CHAVE_PADRAO:
+        raise ImproperlyConfigured(
+            "Defina DJANGO_SECRET_KEY: a chave padrão só serve para desenvolvimento."
+        )
+    # O Render (e qualquer proxy com HTTPS) recebe a conexão segura e repassa
+    # ao Django por HTTP comum, avisando no cabeçalho X-Forwarded-Proto. Sem
+    # isto, o Django acha que o site não é HTTPS e recusa os formulários com
+    # "403 CSRF verification failed".
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
 
 # --------------------------------------------------------------------------
 # Apps instalados
@@ -41,6 +67,8 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "channels",
+    # Envio de e-mail por API (Brevo), usado em produção; ver seção E-mail.
+    "anymail",
     # Apps da Sessão Zero
     "core",
     "accounts",
@@ -52,6 +80,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Serve os arquivos de static/ (CSS, imagens) em produção, onde não há
+    # nginx/Apache na frente do Django.
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -110,6 +141,13 @@ DATABASES = {
     }
 }
 
+# A sessão (quem está logado) fica num cookie assinado com a SECRET_KEY, e não
+# no SQLite. Motivo: no Render o disco é apagado a cada reinício, e o plano
+# grátis reinicia o site depois de 15 minutos sem acesso. Com a sessão no
+# SQLite, todo mundo seria deslogado nessas horas. O cookie só guarda o id do
+# usuário (o Django impede que ele seja alterado, mas não o esconde).
+SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
+
 # --------------------------------------------------------------------------
 # MongoDB (banco de dados principal da aplicação, via MongoEngine)
 # --------------------------------------------------------------------------
@@ -139,8 +177,26 @@ USE_TZ = True
 # Arquivos estáticos
 # --------------------------------------------------------------------------
 STATIC_URL = "static/"
+# Pasta para onde `python manage.py collectstatic` copia todos os arquivos
+# estáticos em produção (o WhiteNoise serve a partir dela).
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+}
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Em produção (DEBUG desligado), o Django normalmente não mostra no terminal o
+# erro completo de uma página que deu erro 500. Isto manda esses erros para o
+# log do servidor (no Render, a aba "Logs").
+if not DEBUG:
+    LOGGING = {
+        "version": 1,
+        "disable_existing_loggers": False,
+        "handlers": {"console": {"class": "logging.StreamHandler"}},
+        "root": {"handlers": ["console"], "level": "WARNING"},
+    }
 
 # --------------------------------------------------------------------------
 # E-mail (usado no fluxo de recuperação de senha, RF04)
@@ -157,18 +213,26 @@ EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_TIMEOUT = 10  # segundos; evita travar se o servidor de e-mail não responder
 
-# Basta preencher EMAIL_HOST_USER e EMAIL_HOST_PASSWORD no .env para o envio
-# ser de verdade (SMTP, por padrão o do Gmail). Sem os dois, os e-mails só
-# aparecem no terminal do servidor, o que serve para testar sem configurar nada.
-_ENVIO_REAL = bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
-EMAIL_BACKEND = config(
-    "EMAIL_BACKEND",
-    default=(
-        "django.core.mail.backends.smtp.EmailBackend"
-        if _ENVIO_REAL
-        else "django.core.mail.backends.console.EmailBackend"
-    ),
-)
+# Três jeitos de enviar, escolhidos sozinhos pelo que estiver no .env (ou nas
+# variáveis de ambiente do servidor):
+#
+# 1. BREVO_API_KEY preenchida: envio pela API da Brevo (HTTPS). É o usado no
+#    Render, porque o plano grátis de lá bloqueia o SMTP (portas 25, 465 e 587).
+#    Exige DEFAULT_FROM_EMAIL com um endereço do domínio autenticado na Brevo.
+# 2. EMAIL_HOST_USER e EMAIL_HOST_PASSWORD preenchidos: SMTP (por padrão, o do
+#    Gmail). Funciona no computador local.
+# 3. Nada disso: os e-mails só aparecem no terminal do servidor, o que serve
+#    para testar sem configurar nada.
+BREVO_API_KEY = config("BREVO_API_KEY", default="")
+ANYMAIL = {"BREVO_API_KEY": BREVO_API_KEY}
+
+if BREVO_API_KEY:
+    _BACKEND_PADRAO = "anymail.backends.brevo.EmailBackend"
+elif EMAIL_HOST_USER and EMAIL_HOST_PASSWORD:
+    _BACKEND_PADRAO = "django.core.mail.backends.smtp.EmailBackend"
+else:
+    _BACKEND_PADRAO = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = config("EMAIL_BACKEND", default=_BACKEND_PADRAO)
 
 # O Google mostra a senha de app em grupos de 4 letras separados por espaço;
 # o servidor só aceita sem os espaços.
