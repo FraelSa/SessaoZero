@@ -1,0 +1,15 @@
+# Segredos: o .env guarda senhas e chaves (Brevo, MongoDB) e nunca deve ir
+# para o GitHub. No Render, esses valores ficam em Environment.
+.env
+.env.*
+
+# Ambientes virtuais do Python
+venv*/
+.venv*/
+env/
+
+# Gerados automaticamente pelo Python e pelo Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+staticfiles/
