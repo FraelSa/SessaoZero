@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 
 from campanhas.models import SISTEMAS_RPG_COMUNS
 
-from .avatares import AVATARES_PRONTOS, IDS_AVATARES_PRONTOS
+from .avatares import AVATARES_PRONTOS
 from .imagens import processar_foto
 from .models import Usuario
 

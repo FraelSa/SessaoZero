@@ -91,3 +91,32 @@ class FotoPerfil(Document):
     atualizado_em = DateTimeField(default=datetime.datetime.utcnow)
 
     meta = {"collection": "fotos_perfil"}
+
+
+class CadastroPendente(Document):
+    """Cadastro que ainda não foi confirmado por e-mail.
+
+    A conta (documento em "usuarios") só passa a existir quando a pessoa
+    clica no link enviado por e-mail. Até lá, os dados do cadastro ficam
+    aqui, em uma coleção separada, e o MongoDB apaga sozinho cada registro
+    quando `expira_em` passa (índice TTL). A senha já fica guardada como
+    hash, nunca em texto puro.
+    """
+
+    username = StringField(required=True, max_length=30)
+    email = EmailField(required=True)
+    senha_hash = StringField(required=True)
+
+    token = StringField(required=True, unique=True)
+    criado_em = DateTimeField(default=datetime.datetime.utcnow)
+    # Usado para limitar o reenvio do e-mail (evita disparar e-mails em série).
+    ultimo_envio_em = DateTimeField(default=datetime.datetime.utcnow)
+    expira_em = DateTimeField(required=True)
+
+    meta = {
+        "collection": "cadastros_pendentes",
+        "indexes": [
+            "email",
+            {"fields": ["expira_em"], "expireAfterSeconds": 0},
+        ],
+    }

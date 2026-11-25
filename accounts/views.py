@@ -1,7 +1,10 @@
 import datetime
+import logging
+import math
 import secrets
 
 from django.conf import settings
+from django.contrib.auth.hashers import check_password, make_password
 from django.http import HttpResponse
 from django.contrib import messages
 from django.core.mail import send_mail
@@ -23,88 +26,118 @@ from .forms import (
     ReenviarConfirmacaoForm,
     SolicitarRecuperacaoForm,
 )
-from .models import FotoPerfil, Usuario
+from .models import CadastroPendente, FotoPerfil, Usuario
 
 DURACAO_TOKEN_RECUPERACAO = datetime.timedelta(hours=1)
 DURACAO_TOKEN_CONFIRMACAO = datetime.timedelta(hours=24)
+INTERVALO_REENVIO = datetime.timedelta(seconds=60)
+
+logger = logging.getLogger(__name__)
 
 
-def _enviar_email_confirmacao(request, usuario):
-    """Gera um token novo e manda o link de confirmação para o e-mail do
-    usuário. Levanta exceção se o envio falhar (quem chama decide o que
-    mostrar na tela)."""
-    usuario.token_confirmacao = secrets.token_urlsafe(32)
-    usuario.token_confirmacao_expira_em = (
-        datetime.datetime.utcnow() + DURACAO_TOKEN_CONFIRMACAO
-    )
-    usuario.save()
+def _email_vai_para_o_terminal():
+    """True quando o e-mail não é enviado de verdade (só impresso no terminal)."""
+    return settings.EMAIL_BACKEND.endswith("console.EmailBackend")
 
-    link = request.build_absolute_uri(
-        reverse("confirmar_email", args=[usuario.token_confirmacao])
-    )
+
+def _enviar_email_confirmacao(request, pendente):
+    """Manda o link de confirmação. Levanta exceção se o envio falhar (quem
+    chama decide o que mostrar na tela)."""
+    link = settings.SITE_URL.rstrip("/") + reverse("confirmar_email", args=[pendente.token])
     send_mail(
         subject="Sessão Zero - Confirme o seu e-mail",
         message=(
-            f"Olá, {usuario.username}!\n\n"
-            "Para ativar a sua conta na Sessão Zero, confirme o seu e-mail "
+            f"Olá, {pendente.username}!\n\n"
+            "Para criar a sua conta na Sessão Zero, confirme o seu e-mail "
             f"pelo link abaixo (válido por 24 horas):\n{link}\n\n"
-            "Se você não criou essa conta, pode ignorar este e-mail."
+            "Se você não pediu esse cadastro, pode ignorar este e-mail: "
+            "nenhuma conta será criada."
         ),
         from_email=settings.DEFAULT_FROM_EMAIL,
-        recipient_list=[usuario.email],
+        recipient_list=[pendente.email],
     )
 
 
+def _renovar_e_enviar(request, pendente):
+    """Gera um link novo (com 24 horas de validade) e o envia. O link novo só
+    é gravado depois que o e-mail saiu, então uma falha de envio não
+    invalida o link anterior."""
+    agora = datetime.datetime.utcnow()
+    pendente.token = secrets.token_urlsafe(32)
+    pendente.expira_em = agora + DURACAO_TOKEN_CONFIRMACAO
+    _enviar_email_confirmacao(request, pendente)
+    pendente.ultimo_envio_em = agora
+    pendente.save()
+
+
+def _segundos_ate_poder_reenviar(pendente):
+    liberado_em = pendente.ultimo_envio_em + INTERVALO_REENVIO
+    return max(math.ceil((liberado_em - datetime.datetime.utcnow()).total_seconds()), 0)
+
+
 def cadastro(request):
-    """RF01 - criar conta."""
+    """RF01 - criar conta. A conta só é criada no banco depois que a pessoa
+    confirma o e-mail (ver confirmar_email)."""
     if usuario_atual(request):
         return redirect("home")
 
     if request.method == "POST":
         form = CadastroForm(request.POST)
         if form.is_valid():
-            usuario = Usuario(
+            pendente = CadastroPendente(
                 username=form.cleaned_data["username"],
                 email=form.cleaned_data["email"],
-                aguardando_confirmacao=True,
+                senha_hash=make_password(form.cleaned_data["senha"]),
+                token=secrets.token_urlsafe(32),
+                expira_em=datetime.datetime.utcnow() + DURACAO_TOKEN_CONFIRMACAO,
             )
-            usuario.set_senha(form.cleaned_data["senha"])
-
-            # Cadastros antigos que nunca foram confirmados não podem
-            # "prender" o e-mail ou o nome de usuário: quem se cadastra de
-            # novo assume o lugar deles.
-            Usuario.objects(aguardando_confirmacao=True, email=usuario.email).delete()
-            Usuario.objects(aguardando_confirmacao=True, username=usuario.username).delete()
-
             try:
-                usuario.save()
-            except NotUniqueError:
-                # As validações em CadastroForm já checam duplicidade, mas
-                # não cobrem 100% o caso de dois cadastros simultâneos; o
-                # índice único do Mongo garante a segurança final, e aqui
-                # só evitamos que isso vire um erro 500 para o usuário.
-                form.add_error(None, "Nome de usuário ou e-mail já em uso. Tente novamente.")
-            else:
-                try:
-                    _enviar_email_confirmacao(request, usuario)
-                except Exception:  # noqa: BLE001 - falha de SMTP não deve derrubar o cadastro
-                    messages.error(
-                        request,
-                        "Sua conta foi criada, mas não conseguimos enviar o e-mail de "
-                        "confirmação. Use a opção de reenviar abaixo.",
-                    )
-                    return redirect("reenviar_confirmacao")
-
-                messages.success(
-                    request,
-                    f"Conta criada! Enviamos um link de confirmação para {usuario.email}. "
-                    "Confirme o e-mail para poder entrar.",
+                _enviar_email_confirmacao(request, pendente)
+            except Exception:  # noqa: BLE001 - qualquer falha de SMTP
+                logger.exception("Falha ao enviar e-mail de confirmação para %s", pendente.email)
+                form.add_error(
+                    None,
+                    "Não conseguimos enviar o e-mail de confirmação agora. "
+                    "Confira o endereço e tente de novo em instantes.",
                 )
-                return redirect("login")
+            else:
+                # Um novo pedido para o mesmo e-mail substitui o anterior.
+                CadastroPendente.objects(email=pendente.email).delete()
+                pendente.save()
+                request.session["email_pendente"] = pendente.email
+                return redirect("verifique_email")
     else:
         form = CadastroForm()
 
     return render(request, "accounts/cadastro.html", {"form": form})
+
+
+def verifique_email(request):
+    """Tela de "confirme o seu e-mail", com a opção de pedir o link de novo."""
+    email = request.session.get("email_pendente")
+    pendente = CadastroPendente.objects(email=email).first() if email else None
+    if pendente is None:
+        return redirect("cadastro")
+
+    if request.method == "POST":
+        espera = _segundos_ate_poder_reenviar(pendente)
+        if espera > 0:
+            messages.error(request, f"Aguarde {espera} segundos para pedir um novo link.")
+        else:
+            try:
+                _renovar_e_enviar(request, pendente)
+            except Exception:  # noqa: BLE001
+                logger.exception("Falha ao reenviar e-mail de confirmação para %s", pendente.email)
+                messages.error(request, "Não foi possível enviar o e-mail agora. Tente de novo em instantes.")
+            else:
+                messages.success(request, f"Enviamos um novo link para {pendente.email}.")
+        return redirect("verifique_email")
+
+    return render(
+        request,
+        "accounts/verifique_email.html",
+        {"email": pendente.email, "email_no_terminal": _email_vai_para_o_terminal()},
+    )
 
 
 def login_view(request):
@@ -123,8 +156,20 @@ def login_view(request):
             # e-mail ou a senha que errou, para não facilitar tentativas de
             # descobrir quais e-mails têm conta cadastrada.
             if usuario is None or not usuario.checar_senha(senha):
-                form.add_error(None, "E-mail ou senha inválidos.")
+                pendente = CadastroPendente.objects(email=email).first()
+                if pendente is not None and check_password(senha, pendente.senha_hash):
+                    # Quem acertou a senha de um cadastro ainda não confirmado
+                    # precisa saber o que falta, em vez de ver "inválido".
+                    form.add_error(
+                        None,
+                        "Falta confirmar o seu e-mail. Abra o link que enviamos no "
+                        "cadastro, ou peça um novo abaixo.",
+                    )
+                else:
+                    form.add_error(None, "E-mail ou senha inválidos.")
             elif usuario.aguardando_confirmacao:
+                # Conta criada pela versão antiga, que gravava o usuário antes
+                # da confirmação.
                 form.add_error(
                     None,
                     "Confirme o seu e-mail antes de entrar. Procure o link que "
@@ -147,24 +192,66 @@ def logout_view(request):
 
 
 def confirmar_email(request, token):
-    """Passo final do cadastro: o usuário clica no link recebido por e-mail."""
-    usuario = Usuario.objects(token_confirmacao=token, aguardando_confirmacao=True).first()
-    token_valido = (
-        usuario is not None
-        and usuario.token_confirmacao_expira_em is not None
-        and usuario.token_confirmacao_expira_em > datetime.datetime.utcnow()
-    )
+    """Passo final do cadastro: o usuário clica no link recebido por e-mail e
+    só então a conta é criada no banco."""
+    agora = datetime.datetime.utcnow()
+    pendente = CadastroPendente.objects(token=token, expira_em__gt=agora).first()
 
-    if not token_valido:
-        messages.error(request, "Esse link de confirmação é inválido ou expirou. Peça um novo.")
+    if pendente is None:
+        # Contas criadas pela versão antiga já estavam em "usuarios", só
+        # marcadas como aguardando confirmação; o link delas continua valendo.
+        legado = Usuario.objects(token_confirmacao=token, aguardando_confirmacao=True).first()
+        if (
+            legado is not None
+            and legado.token_confirmacao_expira_em is not None
+            and legado.token_confirmacao_expira_em > agora
+        ):
+            legado.aguardando_confirmacao = False
+            legado.token_confirmacao = None
+            legado.token_confirmacao_expira_em = None
+            legado.save()
+            messages.success(request, "E-mail confirmado! Agora você já pode entrar.")
+            return redirect("login")
+
+        messages.error(
+            request,
+            "Esse link de confirmação é inválido ou expirou. Peça um novo ou refaça o cadastro.",
+        )
         return redirect("reenviar_confirmacao")
 
-    usuario.aguardando_confirmacao = False
-    usuario.token_confirmacao = None
-    usuario.token_confirmacao_expira_em = None
-    usuario.save()
+    # Outra pessoa pode ter criado uma conta com o mesmo e-mail ou nome de
+    # usuário enquanto este cadastro esperava a confirmação.
+    ja_existe = (
+        Usuario.objects(email=pendente.email, aguardando_confirmacao__ne=True).first()
+        or Usuario.objects(username=pendente.username, aguardando_confirmacao__ne=True).first()
+    )
+    if ja_existe is not None:
+        pendente.delete()
+        messages.error(
+            request,
+            "Esse e-mail ou nome de usuário já foi usado em outra conta. "
+            "Se a conta for sua, entre normalmente; se não, refaça o cadastro.",
+        )
+        return redirect("login")
 
-    messages.success(request, "E-mail confirmado! Agora você já pode entrar.")
+    # Remove restos de cadastros da versão antiga que nunca foram confirmados.
+    Usuario.objects(aguardando_confirmacao=True, email=pendente.email).delete()
+    Usuario.objects(aguardando_confirmacao=True, username=pendente.username).delete()
+
+    usuario = Usuario(
+        username=pendente.username,
+        email=pendente.email,
+        senha_hash=pendente.senha_hash,
+    )
+    try:
+        usuario.save()
+    except NotUniqueError:
+        pendente.delete()
+        messages.error(request, "Não foi possível criar a conta. Tente fazer o cadastro de novo.")
+        return redirect("cadastro")
+
+    pendente.delete()
+    messages.success(request, "E-mail confirmado! Sua conta foi criada. Agora você já pode entrar.")
     return redirect("login")
 
 
@@ -174,15 +261,34 @@ def reenviar_confirmacao(request):
         form = ReenviarConfirmacaoForm(request.POST)
         if form.is_valid():
             email = form.cleaned_data["email"].strip().lower()
-            usuario = Usuario.objects(email=email, aguardando_confirmacao=True).first()
-            if usuario:
+            pendente = CadastroPendente.objects(email=email).first()
+            legado = None
+
+            if pendente is None:
+                # Conta da versão antiga, ainda em "usuarios": passa a ser um
+                # cadastro pendente comum, e o registro antigo é apagado.
+                legado = Usuario.objects(email=email, aguardando_confirmacao=True).first()
+                if legado is not None:
+                    pendente = CadastroPendente(
+                        username=legado.username,
+                        email=legado.email,
+                        senha_hash=legado.senha_hash,
+                        token=secrets.token_urlsafe(32),
+                        expira_em=datetime.datetime.utcnow(),
+                        ultimo_envio_em=datetime.datetime(1970, 1, 1),
+                    )
+
+            if pendente is not None and _segundos_ate_poder_reenviar(pendente) == 0:
                 try:
-                    _enviar_email_confirmacao(request, usuario)
+                    _renovar_e_enviar(request, pendente)
                 except Exception:  # noqa: BLE001
+                    logger.exception("Falha ao reenviar e-mail de confirmação para %s", email)
                     messages.error(request, "Não foi possível enviar o e-mail agora. Tente de novo em instantes.")
                     return redirect("reenviar_confirmacao")
+                if legado is not None:
+                    legado.delete()
 
-            # Mesma resposta exista ou não a conta, para não revelar quais
+            # Mesma resposta exista ou não o cadastro, para não revelar quais
             # e-mails estão cadastrados.
             messages.success(
                 request,
@@ -336,8 +442,8 @@ def solicitar_recuperacao_senha(request):
                 )
                 usuario.save()
 
-                link = request.build_absolute_uri(
-                    reverse("redefinir_senha", args=[usuario.token_recuperacao_senha])
+                link = settings.SITE_URL.rstrip("/") + reverse(
+                    "redefinir_senha", args=[usuario.token_recuperacao_senha]
                 )
                 send_mail(
                     subject="Sessão Zero - Redefinição de senha",

@@ -6,6 +6,7 @@ urlpatterns = [
     path("cadastro/", views.cadastro, name="cadastro"),
     path("login/", views.login_view, name="login"),
     path("logout/", views.logout_view, name="logout"),
+    path("verifique-seu-email/", views.verifique_email, name="verifique_email"),
     path("confirmar-email/<str:token>/", views.confirmar_email, name="confirmar_email"),
     path("reenviar-confirmacao/", views.reenviar_confirmacao, name="reenviar_confirmacao"),
     path("preferencias/", views.editar_preferencias, name="editar_preferencias"),

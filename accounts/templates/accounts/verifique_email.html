@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block titulo %}Confirme o seu e-mail - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Confirme o seu e-mail</h1>
+        <div class="caixa">
+            <p>Enviamos um link de confirmação para <strong>{{ email }}</strong>. Abra o e-mail e clique no link para criar a sua conta. Ele vale por 24 horas.</p>
+            {% if email_no_terminal %}
+                <p class="mensagem">Modo de desenvolvimento: o e-mail não vai para a caixa de entrada. Ele aparece no terminal onde o servidor está rodando. Para enviar de verdade, configure o SMTP no arquivo .env.</p>
+            {% endif %}
+            <p class="campo__ajuda">Não chegou? Olhe a caixa de spam ou peça um novo link.</p>
+            <form method="post">
+                {% csrf_token %}
+                <div class="acoes">
+                    <button class="botao botao--secundario" type="submit">Enviar o link de novo</button>
+                </div>
+            </form>
+        </div>
+        <p class="painel__rodape">Digitou o e-mail errado? <a href="{% url 'cadastro' %}">Refazer o cadastro</a></p>
+    </section>
+{% endblock %}

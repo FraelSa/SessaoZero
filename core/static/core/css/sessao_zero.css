@@ -192,7 +192,7 @@ p { margin: 0 0 1em; }
 .marca__icone { width: 1.9rem; height: 1.9rem; flex: none; }
 .marca__zero { fill: var(--laranja); }
 
-.topo__acoes { display: flex; flex-wrap: wrap; align-items: center; gap: var(--espaco-1) var(--espaco-3); }
+.topo__acoes { display: flex; align-items: center; gap: var(--espaco-3); margin-left: auto; }
 
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--espaco-1) 1.1rem; }
 
@@ -263,7 +263,7 @@ p { margin: 0 0 1em; }
   text-decoration: none;
 }
 .menu__link:hover { background: var(--acao-fundo); color: var(--tinta); }
-.menu :focus-visible { outline-color: var(--destaque); }
+.menu__painel :focus-visible { outline-color: var(--destaque); }
 
 .menu__painel > .menu__secao:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .menu__secao { margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1.5px solid var(--linha); }
@@ -778,12 +778,27 @@ input[type="file"]::file-selector-button {
 
 /* ---------- Telas pequenas ---------- */
 
+/* Topo em duas linhas: marca + perfil em cima, links embaixo. Vale para
+   telas estreitas e também para zoom alto do navegador. */
+@media (max-width: 52rem) {
+  .marca { order: 1; }
+  .topo__acoes { display: contents; }
+  .menu { order: 2; }
+  .nav { order: 3; flex: 1 1 100%; gap: 0.25rem 1.1rem; }
+}
+
+/* Com "Texto maior" ligado tudo ocupa mais espaço, então a troca vem antes. */
+@media (max-width: 62rem) {
+  html[data-texto="grande"] .marca { order: 1; }
+  html[data-texto="grande"] .topo__acoes { display: contents; }
+  html[data-texto="grande"] .menu { order: 2; }
+  html[data-texto="grande"] .nav { order: 3; flex: 1 1 100%; gap: 0.25rem 1.1rem; }
+}
+
 @media (max-width: 40rem) {
   .conteudo { padding: var(--espaco-3) 1rem 3rem; }
   .topo__miolo { padding: 0.65rem 1rem; }
-  .topo__acoes { display: contents; }
-  .menu { order: 2; }
-  .nav { order: 3; flex: 1 1 100%; gap: 0.25rem 0.85rem; font-size: 0.95rem; }
+  .nav { gap: 0.25rem 0.85rem; font-size: 0.95rem; }
 
   /* O painel passa a abrir na largura da tela, abaixo do topo. */
   .menu { position: static; }
@@ -794,4 +809,8 @@ input[type="file"]::file-selector-button {
   .pagina-topo { align-items: flex-start; }
   .hero { gap: var(--espaco-2); }
   .acoes .botao { flex: 1 1 auto; }
+}
+
+@media (max-width: 26rem) {
+  .nav { gap: 0.25rem 0.7rem; font-size: 0.9rem; }
 }
