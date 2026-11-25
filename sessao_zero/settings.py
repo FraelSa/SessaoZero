@@ -75,6 +75,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.usuario_logado",
                 "notificacoes.context_processors.notificacoes_nao_lidas",
+                "core.context_processors.versao_css",
             ],
         },
     },
@@ -149,21 +150,39 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # sem precisar configurar um servidor SMTP. Em produção, troque por algo
 # como django.core.mail.backends.smtp.EmailBackend + as variáveis de host/
 # usuário/senha do provedor de e-mail escolhido.
-EMAIL_BACKEND = config(
-    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
-)
-DEFAULT_FROM_EMAIL = config("DEFAULT_FROM_EMAIL", default="contato@sessaozero.local")
-
-# Envio real (SMTP). Só é usado quando EMAIL_BACKEND aponta para o backend
-# SMTP no .env (ver .env.example). Sem isso, os e-mails só aparecem no
-# terminal do servidor.
-EMAIL_HOST = config("EMAIL_HOST", default="")
-EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_HOST_USER = config("EMAIL_HOST_USER", default="")
 EMAIL_HOST_PASSWORD = config("EMAIL_HOST_PASSWORD", default="")
+EMAIL_HOST = config("EMAIL_HOST", default="smtp.gmail.com")
+EMAIL_PORT = config("EMAIL_PORT", default=587, cast=int)
 EMAIL_USE_TLS = config("EMAIL_USE_TLS", default=True, cast=bool)
 EMAIL_TIMEOUT = 10  # segundos; evita travar se o servidor de e-mail não responder
 
-# Endereço público do site, usado para montar os links dos e-mails de
-# notificação (que são enviados fora de uma requisição, sem saber o host).
+# Basta preencher EMAIL_HOST_USER e EMAIL_HOST_PASSWORD no .env para o envio
+# ser de verdade (SMTP, por padrão o do Gmail). Sem os dois, os e-mails só
+# aparecem no terminal do servidor, o que serve para testar sem configurar nada.
+_ENVIO_REAL = bool(EMAIL_HOST_USER and EMAIL_HOST_PASSWORD)
+EMAIL_BACKEND = config(
+    "EMAIL_BACKEND",
+    default=(
+        "django.core.mail.backends.smtp.EmailBackend"
+        if _ENVIO_REAL
+        else "django.core.mail.backends.console.EmailBackend"
+    ),
+)
+
+# O Google mostra a senha de app em grupos de 4 letras separados por espaço;
+# o servidor só aceita sem os espaços.
+if EMAIL_HOST == "smtp.gmail.com":
+    EMAIL_HOST_PASSWORD = EMAIL_HOST_PASSWORD.replace(" ", "")
+
+DEFAULT_FROM_EMAIL = config(
+    "DEFAULT_FROM_EMAIL",
+    default=f"Sessão Zero <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "contato@sessaozero.local",
+)
+
+# Endereço do site usado nos links dos e-mails (confirmação de conta,
+# redefinição de senha e notificações). É o endereço que a pessoa vai abrir ao
+# clicar no link, então precisa ser alcançável de onde ela lê o e-mail: se ela
+# abrir no celular ou em outro computador, troque 127.0.0.1 pelo IP do
+# computador servidor ou pelo endereço público do site.
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
