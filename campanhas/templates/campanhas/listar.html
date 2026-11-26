@@ -10,7 +10,11 @@
         {% endif %}
     </div>
 
-    <form class="filtro" method="get" action="{% url 'listar_campanhas' %}">
+    <form class="filtro" method="get" action="{% url 'listar_campanhas' %}" role="search">
+        <div class="campo campo--busca">
+            <label for="filtro-busca">Buscar por palavra-chave</label>
+            <input id="filtro-busca" type="search" name="q" value="{{ busca }}" maxlength="100" placeholder="título, sinopse, sistema ou mestre" autocomplete="off">
+        </div>
         <div class="campo">
             <label for="filtro-sistema">Sistema de RPG</label>
             <select id="filtro-sistema" name="sistema">
@@ -20,13 +24,23 @@
                 {% endfor %}
             </select>
         </div>
-        <button class="botao botao--secundario" type="submit">Filtrar</button>
-        {% if sistema_filtro %}<a href="{% url 'listar_campanhas' %}">Limpar filtro</a>{% endif %}
+        <button class="botao botao--secundario" type="submit">Buscar</button>
+        {% if sistema_filtro or busca %}<a href="{% url 'listar_campanhas' %}">Limpar busca</a>{% endif %}
     </form>
+
+    {% if total is not None %}
+        <p class="resultado-busca" role="status">
+            {% if total == 0 %}Nenhuma campanha encontrada{% elif total == 1 %}1 campanha encontrada{% else %}{{ total }} campanhas encontradas{% endif %}{% if busca %} para “{{ busca }}”{% endif %}{% if sistema_filtro %} em {{ sistema_filtro }}{% endif %}.
+        </p>
+    {% endif %}
 
     {% for campanha in campanhas %}
         {% include "campanhas/_ficha.html" %}
     {% empty %}
-        <p class="vazio">Nenhuma campanha{% if sistema_filtro %} de {{ sistema_filtro }}{% endif %} por enquanto.{% if usuario_logado %} Crie a primeira e convide jogadores.{% endif %}</p>
+        {% if busca or sistema_filtro %}
+            <p class="vazio">Tente outras palavras ou escolha “Todos os sistemas”. A busca ignora acentos e maiúsculas.</p>
+        {% else %}
+            <p class="vazio">Nenhuma campanha por enquanto.{% if usuario_logado %} Crie a primeira e convide jogadores.{% endif %}</p>
+        {% endif %}
     {% endfor %}
 {% endblock %}

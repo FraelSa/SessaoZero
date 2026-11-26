@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% load horario estrelas %}
+
+{% block titulo %}{{ pessoa.username }} - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel painel--larga perfil-publico">
+        <div class="perfil-publico__cabeca">
+            <img class="avatar avatar--grande" src="{% url 'avatar_usuario' pessoa.username %}?v={{ pessoa.avatar_versao }}" alt="" width="88" height="88">
+            <div>
+                <h1>{{ pessoa.username }}</h1>
+                <p class="campo__ajuda">Na Sessão Zero desde {{ pessoa.criado_em|local|date:"d/m/Y" }}</p>
+                {% if eh_proprio %}<p><a href="{% url 'editar_perfil' %}">Trocar o meu avatar</a></p>{% endif %}
+            </div>
+        </div>
+
+        <h2>Avaliações recebidas</h2>
+        <div class="perfil-publico__reputacao">
+            <div class="reputacao">
+                <p class="reputacao__titulo">Como mestre</p>
+                {% if como_mestre.total %}
+                    <p class="reputacao__nota">{% estrelas como_mestre.media %} {{ como_mestre.media|nota_br }}</p>
+                    <p class="reputacao__total">{{ como_mestre.total }} avaliaç{{ como_mestre.total|pluralize:"ão,ões" }}</p>
+                {% else %}
+                    <p class="campo__ajuda">Sem avaliações ainda.</p>
+                {% endif %}
+            </div>
+            <div class="reputacao">
+                <p class="reputacao__titulo">Como jogador</p>
+                {% if como_jogador.total %}
+                    <p class="reputacao__nota">{% estrelas como_jogador.media %} {{ como_jogador.media|nota_br }}</p>
+                    <p class="reputacao__total">{{ como_jogador.total }} avaliaç{{ como_jogador.total|pluralize:"ão,ões" }}</p>
+                {% else %}
+                    <p class="campo__ajuda">Sem avaliações ainda.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if avaliacoes %}
+            <ul class="perfil-publico__lista">
+                {% for avaliacao in avaliacoes %}
+                    <li>
+                        <div>
+                            {% estrelas avaliacao.nota %}
+                            <span class="selo">como {{ avaliacao.papel_avaliado }}</span>
+                            de {% if avaliacao.avaliador_username == "[conta excluída]" %}{{ avaliacao.avaliador_username }}{% else %}<a href="{% url 'perfil_publico' avaliacao.avaliador_username %}">{{ avaliacao.avaliador_username }}</a>{% endif %}
+                            na campanha “{{ avaliacao.campanha_titulo }}”,
+                            {{ avaliacao.criado_em|local|date:"d/m/Y" }}
+                        </div>
+                        {% if avaliacao.comentario %}<p>{{ avaliacao.comentario|linebreaksbr }}</p>{% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+
+        <h2>Campanhas que mestra</h2>
+        {% if campanhas_mestradas %}
+            <ul class="perfil-publico__lista">
+                {% for campanha in campanhas_mestradas %}
+                    <li>
+                        <a href="{% url 'detalhe_campanha' campanha.id %}">{{ campanha.titulo }}</a>
+                        <span class="tag tag--{{ campanha.status }}">{{ campanha.status|capfirst }}</span>
+                        <span class="campo__ajuda">{{ campanha.sistema_rpg }}</span>
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="campo__ajuda">Não mestra nenhuma campanha no momento.</p>
+        {% endif %}
+    </section>
+{% endblock %}

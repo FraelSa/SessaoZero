@@ -17,13 +17,20 @@ from .models import Usuario
 
 CHAVE_SESSAO = "usuario_id"
 
+# O Usuario da requisição é buscado uma vez e guardado no próprio `request`:
+# o middleware de fuso horário, os context processors e a view o consultam.
+_ATRIBUTO_CACHE = "_usuario_sessao_zero"
+_SEM_CACHE = object()
+
 
 def fazer_login(request, usuario):
     request.session[CHAVE_SESSAO] = str(usuario.id)
+    request.__dict__.pop(_ATRIBUTO_CACHE, None)
 
 
 def fazer_logout(request):
     request.session.pop(CHAVE_SESSAO, None)
+    request.__dict__.pop(_ATRIBUTO_CACHE, None)
 
 
 def usuario_atual(request):
@@ -34,18 +41,25 @@ def usuario_atual(request):
     ser resistente a um id de sessão corrompido/antigo/malformado — sem
     o try/except, um único cookie de sessão inválido derrubaria todas as
     páginas do site com erro 500."""
+    em_cache = request.__dict__.get(_ATRIBUTO_CACHE, _SEM_CACHE)
+    if em_cache is not _SEM_CACHE:
+        return em_cache
+
+    usuario = None
     usuario_id = request.session.get(CHAVE_SESSAO)
-    if not usuario_id:
-        return None
-    try:
-        return Usuario.objects(
-            id=usuario_id, ativo=True, aguardando_confirmacao__ne=True
-        ).first()
-    except MongoValidationError:
-        # Id em formato inválido: trata como se não houvesse ninguém
-        # logado e limpa a sessão para não repetir o erro a cada request.
-        request.session.pop(CHAVE_SESSAO, None)
-        return None
+    if usuario_id:
+        try:
+            usuario = Usuario.objects(
+                id=usuario_id, ativo=True, aguardando_confirmacao__ne=True
+            ).first()
+        except MongoValidationError:
+            # Id em formato inválido: trata como se não houvesse ninguém
+            # logado e limpa a sessão para não repetir o erro a cada request.
+            request.session.pop(CHAVE_SESSAO, None)
+            usuario = None
+
+    request.__dict__[_ATRIBUTO_CACHE] = usuario
+    return usuario
 
 
 def login_obrigatorio(view_func):

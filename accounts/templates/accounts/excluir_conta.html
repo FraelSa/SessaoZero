@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block titulo %}Excluir conta - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Excluir conta</h1>
+        <form class="caixa" method="post" novalidate>
+            {% csrf_token %}
+            <p>Ao excluir a conta:</p>
+            <ul>
+                <li>{% if resumo.campanhas_mestradas %}as <strong>{{ resumo.campanhas_mestradas }}</strong> campanha{{ resumo.campanhas_mestradas|pluralize }} que você mestra {{ resumo.campanhas_mestradas|pluralize:"será,serão" }} excluída{{ resumo.campanhas_mestradas|pluralize }}, e os jogadores inscritos serão avisados;{% else %}você não mestra nenhuma campanha;{% endif %}</li>
+                <li>{% if resumo.campanhas_inscrito %}você sai de <strong>{{ resumo.campanhas_inscrito }}</strong> campanha{{ resumo.campanhas_inscrito|pluralize }} e as vagas voltam a ficar livres;{% else %}você não está inscrito em nenhuma campanha;{% endif %}</li>
+                <li>seus comentários, mensagens de chat e avaliações que você escreveu continuam, mas sem o seu nome; as avaliações que você recebeu são apagadas;</li>
+                <li>foto, preferências e notificações são apagadas.</li>
+            </ul>
+            <p><strong>Essa ação não pode ser desfeita.</strong></p>
+            {% include "partials/_form_campos.html" %}
+            <div class="acoes">
+                <button class="botao botao--perigo" type="submit">Excluir minha conta</button>
+                <a class="botao botao--secundario" href="{% url 'minha_conta' %}">Cancelar</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

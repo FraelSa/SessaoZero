@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block titulo %}Minha conta - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel painel--larga">
+        <h1>Minha conta</h1>
+
+        <div class="caixa">
+            <p class="perfil__nome">{{ usuario.username }}</p>
+            <p class="campo__ajuda">{{ usuario.email }}</p>
+        </div>
+
+        <form class="caixa" method="post" novalidate>
+            {% csrf_token %}
+            <h2>Alterar senha</h2>
+            {% include "partials/_form_campos.html" %}
+            <div class="acoes">
+                <button class="botao" type="submit">Alterar senha</button>
+            </div>
+        </form>
+
+        <div class="caixa">
+            <h2>Seus dados</h2>
+            <p>Veja como as outras pessoas enxergam você, baixe uma cópia de tudo o que a Sessão Zero guarda sobre você e leia como tratamos os seus dados.</p>
+            <div class="acoes">
+                <a class="botao botao--secundario" href="{% url 'perfil_publico' usuario.username %}">Ver meu perfil público</a>
+                <a class="botao botao--secundario" href="{% url 'exportar_dados' %}">Exportar meus dados</a>
+                <a class="botao botao--secundario" href="{% url 'politica_privacidade' %}">Política de Privacidade</a>
+            </div>
+        </div>
+
+        <div class="caixa">
+            <h2>Excluir conta</h2>
+            <p>Apaga a sua conta e os seus dados. As campanhas que você mestra são excluídas e as suas inscrições, removidas. Essa ação não pode ser desfeita.</p>
+            <div class="acoes">
+                <a class="botao botao--perigo-contorno" href="{% url 'excluir_conta' %}">Excluir minha conta</a>
+            </div>
+        </div>
+    </section>
+{% endblock %}

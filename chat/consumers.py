@@ -8,6 +8,7 @@ dentro do consumer (que é assíncrono) passa por
 thread separada sem travar o loop de eventos.
 """
 
+import datetime
 import json
 
 from channels.db import database_sync_to_async
@@ -15,7 +16,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 
 from accounts.models import Usuario
 from campanhas.utils import buscar_campanha_ou_404
-from core.horario import para_horario_local
+from core.horario import UTC, zona_segura
 from moderacao.filtros import moderar_texto
 from moderacao.models import ConteudoBloqueado
 
@@ -37,6 +38,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         self.usuario = usuario
+        # RD04 - a hora de cada mensagem é mostrada no fuso de quem a recebe.
+        self.zona = zona_segura(usuario.fuso_horario)
 
         await self.channel_layer.group_add(self.grupo, self.channel_name)
         await self.accept()
@@ -84,20 +87,26 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 "type": "mensagem_chat",
                 "autor_username": mensagem.autor_username,
                 "texto": mensagem.texto,
-                "criado_em": para_horario_local(mensagem.criado_em).strftime("%H:%M"),
+                # Em UTC; cada conexão converte para o fuso do seu usuário.
+                "criado_em_utc": mensagem.criado_em.replace(tzinfo=UTC).isoformat(),
             },
         )
 
     async def mensagem_chat(self, evento):
         """Handler chamado quando alguém do grupo manda uma mensagem —
         repassa para o WebSocket deste usuário específico."""
+        hora = (
+            datetime.datetime.fromisoformat(evento["criado_em_utc"])
+            .astimezone(self.zona)
+            .strftime("%H:%M")
+        )
         await self.send(
             text_data=json.dumps(
                 {
                     "tipo": "mensagem",
                     "autor_username": evento["autor_username"],
                     "texto": evento["texto"],
-                    "criado_em": evento["criado_em"],
+                    "criado_em": hora,
                 }
             )
         )

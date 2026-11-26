@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block titulo %}Exportar dados - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>Exportar meus dados</h1>
+        <form class="caixa" method="post">
+            {% csrf_token %}
+            <p>Você recebe um arquivo JSON, que um programa consegue ler e você consegue abrir em qualquer editor de texto, com:</p>
+            <ul>
+                <li>os dados da conta: nome de usuário, e-mail, preferências, fuso horário, avatar e o registro do aceite da Política de Privacidade;</li>
+                <li>as campanhas que você mestra e aquelas em que está inscrito;</li>
+                <li>os comentários e as mensagens de chat que você escreveu;</li>
+                <li>as avaliações que você fez e as que recebeu;</li>
+                <li>os avisos que recebeu e os textos que a moderação barrou.</li>
+            </ul>
+            <p class="campo__ajuda">Ficam de fora a sua senha (só guardamos um código irreversível dela) e os dados de outras pessoas, como o e-mail de quem se inscreveu nas suas campanhas.</p>
+            <p class="campo__ajuda">O arquivo tem dados pessoais. Guarde-o em um lugar seguro.</p>
+            <div class="acoes">
+                <button class="botao" type="submit">Baixar meus dados</button>
+                <a class="botao botao--secundario" href="{% url 'minha_conta' %}">Voltar</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

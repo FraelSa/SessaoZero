@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block titulo %}Minhas inscrições - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="pagina-topo">
+        <h1>Minhas inscrições</h1>
+    </div>
+
+    {% if total == 0 %}
+        <p class="vazio">
+            Você ainda não está inscrito em nenhuma mesa. Veja as
+            <a href="{% url 'listar_campanhas' %}">campanhas</a> ou as
+            <a href="{% url 'campanhas_recomendadas' %}">recomendadas para você</a>.
+        </p>
+    {% else %}
+        <p class="resultado-busca">
+            {% if total == 1 %}Você está inscrito em 1 mesa.{% else %}Você está inscrito em {{ total }} mesas.{% endif %}
+        </p>
+
+        {% if proximas %}
+            <h2 class="grupo-titulo">Próximas sessões</h2>
+            {% for campanha in proximas %}
+                {% include "campanhas/_ficha.html" %}
+            {% endfor %}
+        {% endif %}
+
+        {% if sem_data %}
+            <h2 class="grupo-titulo">Sem data definida</h2>
+            {% for campanha in sem_data %}
+                {% include "campanhas/_ficha.html" %}
+            {% endfor %}
+        {% endif %}
+
+        {% if realizadas %}
+            <h2 class="grupo-titulo">Sessões já realizadas</h2>
+            {% for campanha in realizadas %}
+                {% include "campanhas/_ficha.html" %}
+            {% endfor %}
+        {% endif %}
+    {% endif %}
+{% endblock %}

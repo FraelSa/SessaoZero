@@ -9,6 +9,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
 from campanhas.models import SISTEMAS_RPG_COMUNS
+from core.horario import FUSOS_HORARIOS
 
 from .avatares import AVATARES_PRONTOS
 from .imagens import processar_foto
@@ -39,6 +40,13 @@ class CadastroForm(forms.Form):
     email = forms.EmailField(label="E-mail")
     senha = forms.CharField(label="Senha", widget=forms.PasswordInput)
     confirmar_senha = forms.CharField(label="Confirmar senha", widget=forms.PasswordInput)
+    # RNF03 - o aceite da Política de Privacidade é obrigatório para criar a conta
+    aceite_politica = forms.BooleanField(
+        label="Li e concordo com a Política de Privacidade",
+        error_messages={
+            "required": "Para criar a conta, é preciso concordar com a Política de Privacidade."
+        },
+    )
 
     def clean_username(self):
         username = self.cleaned_data["username"].strip()
@@ -93,6 +101,16 @@ class PreferenciasForm(forms.Form):
         label="Receber avisos por e-mail",
         required=False,
         help_text="Mudança de data, edições na campanha, novas inscrições e comentários.",
+    )
+    # RD04 - fuso horário da pessoa. Não entra em `preferencias` (que alimenta
+    # a recomendação): é guardado em Usuario.fuso_horario.
+    fuso_horario = forms.ChoiceField(
+        label="Seu fuso horário",
+        choices=FUSOS_HORARIOS,
+        help_text=(
+            "Horários de sessões, comentários, mensagens e avisos aparecem neste fuso. "
+            "Ao marcar uma sessão, o horário que você digita também vale nele."
+        ),
     )
 
     def para_preferencias(self):
@@ -167,3 +185,53 @@ class PerfilForm(forms.Form):
         if dados.get("avatar") == "foto" and not self.tem_foto and not dados.get("foto"):
             self.add_error("avatar", "Você ainda não enviou nenhuma foto.")
         return dados
+
+
+class AlterarSenhaForm(forms.Form):
+    # RF01 - editar a conta: trocar a senha estando logado
+    senha_atual = forms.CharField(label="Senha atual", widget=forms.PasswordInput)
+    nova_senha = forms.CharField(label="Nova senha", widget=forms.PasswordInput)
+    confirmar_nova_senha = forms.CharField(
+        label="Confirmar nova senha", widget=forms.PasswordInput
+    )
+
+    def __init__(self, *args, usuario, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+
+    def clean_senha_atual(self):
+        senha = self.cleaned_data["senha_atual"]
+        if not self.usuario.checar_senha(senha):
+            raise ValidationError("A senha atual não confere.")
+        return senha
+
+    def clean_nova_senha(self):
+        senha = self.cleaned_data["nova_senha"]
+        validate_password(senha)
+        return senha
+
+    def clean(self):
+        dados = super().clean()
+        nova = dados.get("nova_senha")
+        confirmar = dados.get("confirmar_nova_senha")
+        if nova and confirmar and nova != confirmar:
+            self.add_error("confirmar_nova_senha", "As senhas não coincidem.")
+        return dados
+
+
+class ExcluirContaForm(forms.Form):
+    # RF01 - excluir a conta, pedindo a senha e uma confirmação explícita
+    senha = forms.CharField(label="Sua senha", widget=forms.PasswordInput)
+    confirmacao = forms.BooleanField(
+        label="Entendo que a exclusão é definitiva e não pode ser desfeita",
+    )
+
+    def __init__(self, *args, usuario, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+
+    def clean_senha(self):
+        senha = self.cleaned_data["senha"]
+        if not self.usuario.checar_senha(senha):
+            raise ValidationError("Senha incorreta.")
+        return senha

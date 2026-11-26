@@ -11,6 +11,10 @@ urlpatterns = [
     path("reenviar-confirmacao/", views.reenviar_confirmacao, name="reenviar_confirmacao"),
     path("preferencias/", views.editar_preferencias, name="editar_preferencias"),
     path("perfil/", views.editar_perfil, name="editar_perfil"),
+    path("conta/", views.minha_conta, name="minha_conta"),
+    path("exportar/", views.exportar_dados, name="exportar_dados"),
+    path("excluir/", views.excluir_conta, name="excluir_conta"),
+    path("u/<path:username>/", views.perfil_publico, name="perfil_publico"),
     path("avatar/<path:username>/", views.avatar_usuario, name="avatar_usuario"),
     path(
         "recuperar-senha/",

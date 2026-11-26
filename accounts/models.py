@@ -24,6 +24,8 @@ from mongoengine import (
     StringField,
 )
 
+from core.horario import FUSO_PADRAO
+
 
 class Usuario(Document):
     # RF01 - cadastro de usuários
@@ -60,6 +62,16 @@ class Usuario(Document):
 
     # Receber um e-mail a cada notificação do sistema (editável em Preferências).
     notificar_por_email = BooleanField(default=True)
+
+    # RD04 - fuso horário da pessoa (editável em Preferências). Datas e horas
+    # aparecem convertidas para ele, e o horário que o mestre digita ao marcar
+    # uma sessão vale nele. Contas antigas, sem o campo, ficam no padrão.
+    fuso_horario = StringField(default=FUSO_PADRAO)
+
+    # RNF03 - quando (UTC) e em qual versão a pessoa aceitou a Política de
+    # Privacidade ao se cadastrar. Contas antigas não têm o registro.
+    politica_aceita_em = DateTimeField(null=True)
+    politica_versao = StringField(null=True)
 
     ativo = BooleanField(default=True)
     criado_em = DateTimeField(default=datetime.datetime.utcnow)
@@ -109,6 +121,9 @@ class CadastroPendente(Document):
 
     token = StringField(required=True, unique=True)
     criado_em = DateTimeField(default=datetime.datetime.utcnow)
+    # RNF03 - aceite da Política de Privacidade (passa para o Usuario quando
+    # o e-mail é confirmado).
+    politica_aceita_em = DateTimeField(null=True)
     # Usado para limitar o reenvio do e-mail (evita disparar e-mails em série).
     ultimo_envio_em = DateTimeField(default=datetime.datetime.utcnow)
     expira_em = DateTimeField(required=True)

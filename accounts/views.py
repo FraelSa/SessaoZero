@@ -1,11 +1,12 @@
 import datetime
+import json
 import logging
 import math
 import secrets
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.http import HttpResponse
+from django.http import Http404, HttpResponse
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.shortcuts import redirect, render
@@ -13,12 +14,22 @@ from django.templatetags.static import static
 from django.urls import reverse
 from mongoengine.errors import NotUniqueError
 
+from campanhas.avaliacoes import avaliacoes_recebidas, reputacao
+from campanhas.models import Campanha
+from core import politica
+from core.horario import FUSO_PADRAO, IDS_FUSOS
+
 from .avatares import AVATARES_PRONTOS, IDS_AVATARES_PRONTOS, svg_iniciais
 from .auth_utils import fazer_login, fazer_logout, login_obrigatorio, usuario_atual
+from .exclusao import excluir_conta as executar_exclusao_de_conta
+from .exportacao import montar_exportacao
+from .exclusao import resumo_da_exclusao
 from .forms import (
     ESTILOS_PREFERENCIA,
     SISTEMAS_PREFERENCIA,
+    AlterarSenhaForm,
     CadastroForm,
+    ExcluirContaForm,
     LoginForm,
     PerfilForm,
     PreferenciasForm,
@@ -90,6 +101,7 @@ def cadastro(request):
                 senha_hash=make_password(form.cleaned_data["senha"]),
                 token=secrets.token_urlsafe(32),
                 expira_em=datetime.datetime.utcnow() + DURACAO_TOKEN_CONFIRMACAO,
+                politica_aceita_em=datetime.datetime.utcnow(),  # RNF03
             )
             try:
                 _enviar_email_confirmacao(request, pendente)
@@ -242,6 +254,9 @@ def confirmar_email(request, token):
         username=pendente.username,
         email=pendente.email,
         senha_hash=pendente.senha_hash,
+        # RNF03 - cadastros pendentes antigos, de antes do aceite, ficam sem o registro.
+        politica_aceita_em=pendente.politica_aceita_em,
+        politica_versao=politica.VERSAO if pendente.politica_aceita_em else None,
     )
     try:
         usuario.save()
@@ -331,6 +346,31 @@ def avatar_usuario(request, username):
     return resposta
 
 
+def perfil_publico(request, username):
+    """Página pública de uma pessoa: quem é, as avaliações que recebeu (RF06,
+    como mestre e como jogador) e as campanhas que ela mestra. Só mostra o que
+    já é público no resto do site; nunca o e-mail."""
+    pessoa = Usuario.objects(
+        username=username, ativo=True, aguardando_confirmacao__ne=True
+    ).first()
+    if pessoa is None:
+        raise Http404("Pessoa não encontrada.")
+
+    usuario = usuario_atual(request)
+    return render(
+        request,
+        "accounts/perfil_publico.html",
+        {
+            "pessoa": pessoa,
+            "eh_proprio": bool(usuario and usuario.id == pessoa.id),
+            "como_mestre": reputacao(pessoa.email, "mestre"),
+            "como_jogador": reputacao(pessoa.email, "jogador"),
+            "avaliacoes": avaliacoes_recebidas(pessoa.email),
+            "campanhas_mestradas": list(Campanha.objects(mestre_email=pessoa.email)[:10]),
+        },
+    )
+
+
 @login_obrigatorio
 def editar_perfil(request):
     """Perfil do usuário: por enquanto, a escolha do avatar."""
@@ -404,6 +444,7 @@ def editar_preferencias(request):
         if form.is_valid():
             usuario.preferencias = form.para_preferencias()
             usuario.notificar_por_email = form.cleaned_data["receber_emails"]
+            usuario.fuso_horario = form.cleaned_data["fuso_horario"]
             usuario.save()
             messages.success(request, "Preferências atualizadas.")
             return redirect("editar_preferencias")
@@ -421,10 +462,75 @@ def editar_preferencias(request):
                     if e in ESTILOS_PREFERENCIA
                 ],
                 "receber_emails": usuario.notificar_por_email,
+                "fuso_horario": (
+                    usuario.fuso_horario if usuario.fuso_horario in IDS_FUSOS else FUSO_PADRAO
+                ),
             }
         )
 
     return render(request, "accounts/preferencias.html", {"form": form})
+
+
+@login_obrigatorio
+def minha_conta(request):
+    """RF01 - editar a conta: trocar a senha (com a senha atual). A exclusão da
+    conta tem tela própria, com confirmação."""
+    usuario = usuario_atual(request)
+
+    if request.method == "POST":
+        form = AlterarSenhaForm(request.POST, usuario=usuario)
+        if form.is_valid():
+            usuario.set_senha(form.cleaned_data["nova_senha"])
+            # Qualquer link de recuperação pendente deixa de valer.
+            usuario.token_recuperacao_senha = None
+            usuario.token_recuperacao_expira_em = None
+            usuario.save()
+            messages.success(request, "Senha alterada.")
+            return redirect("minha_conta")
+    else:
+        form = AlterarSenhaForm(usuario=usuario)
+
+    return render(request, "accounts/minha_conta.html", {"form": form, "usuario": usuario})
+
+
+@login_obrigatorio
+def exportar_dados(request):
+    """RNF03 - baixar uma cópia dos próprios dados em JSON (acesso e
+    portabilidade). O download é um POST para não ser disparado por um link."""
+    usuario = usuario_atual(request)
+
+    if request.method == "POST":
+        conteudo = json.dumps(montar_exportacao(usuario), ensure_ascii=False, indent=2)
+        resposta = HttpResponse(conteudo, content_type="application/json; charset=utf-8")
+        nome = f"sessao-zero-meus-dados-{datetime.date.today():%Y-%m-%d}.json"
+        resposta["Content-Disposition"] = f'attachment; filename="{nome}"'
+        resposta["Cache-Control"] = "no-store"
+        return resposta
+
+    return render(request, "accounts/exportar_dados.html")
+
+
+@login_obrigatorio
+def excluir_conta(request):
+    """RF01 - excluir a própria conta. Pede a senha e uma confirmação; o que
+    acontece com campanhas, comentários e mensagens está em accounts/exclusao.py."""
+    usuario = usuario_atual(request)
+
+    if request.method == "POST":
+        form = ExcluirContaForm(request.POST, usuario=usuario)
+        if form.is_valid():
+            executar_exclusao_de_conta(usuario)
+            fazer_logout(request)
+            messages.info(request, "Sua conta foi excluída. Sentiremos sua falta na mesa!")
+            return redirect("home")
+    else:
+        form = ExcluirContaForm(usuario=usuario)
+
+    return render(
+        request,
+        "accounts/excluir_conta.html",
+        {"form": form, "resumo": resumo_da_exclusao(usuario)},
+    )
 
 
 def solicitar_recuperacao_senha(request):

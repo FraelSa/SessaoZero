@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% load horario %}
+{% load horario estrelas %}
 
 {% block titulo %}{{ campanha.titulo }} - Sessão Zero{% endblock %}
 
@@ -13,9 +13,51 @@
                 <span class="tag tag--{{ campanha.status }}">{{ campanha.status|capfirst }}</span>
                 <span class="detalhe__sistema">{{ campanha.sistema_rpg }}</span>
             </p>
+            <p class="classificacao">
+                <span class="tag tag--classificacao">{% if campanha.classificacao %}{{ campanha.rotulo_classificacao }}{% else %}Classificação não informada{% endif %}</span>
+                {% for tema in campanha.rotulos_temas %}<span class="tag tag--tema">{{ tema }}</span>{% endfor %}
+            </p>
 
             <div class="texto-corrido">{{ campanha.sinopse|linebreaks }}</div>
         </div>
+
+        {% if avaliacao_alvos %}
+        <section class="detalhe__avaliacoes" id="avaliacoes" aria-labelledby="titulo-avaliacoes">
+            <h2 id="titulo-avaliacoes">Avaliar quem jogou com você</h2>
+            {% if not avaliacoes_abertas %}
+                <p class="campo__ajuda">{{ avaliacoes_fechadas_motivo }}</p>
+            {% else %}
+                <p class="campo__ajuda">Dê uma nota a quem participou desta campanha. Você pode mudar a nota depois.</p>
+                <ul class="avaliacoes">
+                    {% for alvo in avaliacao_alvos %}
+                        <li class="avaliacao">
+                            <form method="post" action="{% url 'avaliar_participante' campanha.id alvo.username %}">
+                                {% csrf_token %}
+                                <div class="avaliacao__cabeca">
+                                    <img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' alvo.username %}" alt="" width="28" height="28" loading="lazy">
+                                    <a href="{% url 'perfil_publico' alvo.username %}">{{ alvo.username }}</a>
+                                    <span class="selo">{{ alvo.papel }}</span>
+                                    {% if alvo.minha %}<span class="avaliacao__atual">Sua nota: {% estrelas alvo.minha.nota %}</span>{% endif %}
+                                </div>
+                                <div class="avaliacao__campos">
+                                    <label for="nota-{{ forloop.counter }}">Nota</label>
+                                    <select id="nota-{{ forloop.counter }}" name="nota" required>
+                                        {% if not alvo.minha %}<option value="" selected>Escolha uma nota</option>{% endif %}
+                                        {% for valor, rotulo in avaliacao_form.fields.nota.choices %}
+                                            <option value="{{ valor }}"{% if alvo.minha.nota == valor %} selected{% endif %}>{{ rotulo }}</option>
+                                        {% endfor %}
+                                    </select>
+                                    <label for="comentario-{{ forloop.counter }}">Comentário (opcional)</label>
+                                    <textarea id="comentario-{{ forloop.counter }}" name="comentario" rows="2" maxlength="500">{{ alvo.minha.comentario }}</textarea>
+                                </div>
+                                <button class="botao" type="submit">{% if alvo.minha %}Atualizar avaliação{% else %}Enviar avaliação{% endif %}</button>
+                            </form>
+                        </li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </section>
+        {% endif %}
 
         <section class="detalhe__comentarios" aria-labelledby="titulo-comentarios">
                 <h2 id="titulo-comentarios">Comentários</h2>
@@ -56,8 +98,15 @@
                     <span class="ficha__sistema">Ficha da mesa</span>
                 </header>
                 <dl class="ficha__campos ficha__campos--coluna">
-                    <div><dt>Mestre</dt><dd class="com-avatar"><img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' campanha.mestre_username %}" alt="" width="28" height="28"><span>{{ campanha.mestre_username }}</span></dd></div>
-                    <div><dt>Próxima sessão</dt><dd>{% if campanha.data_sessao %}{{ campanha.data_sessao|date:"d/m/Y, H:i" }}{% else %}A definir{% endif %}</dd></div>
+                    <div><dt>Mestre</dt><dd class="com-avatar"><img class="avatar avatar--pequeno" src="{% url 'avatar_usuario' campanha.mestre_username %}" alt="" width="28" height="28"><span><a href="{% url 'perfil_publico' campanha.mestre_username %}">{{ campanha.mestre_username }}</a>{% if reputacao_mestre.total %}<small class="ficha__nota">{% estrelas reputacao_mestre.media %} {{ reputacao_mestre.media|nota_br }} ({{ reputacao_mestre.total }} avaliaç{{ reputacao_mestre.total|pluralize:"ão,ões" }})</small>{% endif %}</span></dd></div>
+                    <div><dt>{% if sessao.passada %}Sessão realizada em{% else %}Próxima sessão{% endif %}</dt><dd>
+                        {% if sessao %}
+                            {{ sessao.seu|date:"d/m/Y, H:i" }}
+                            <small class="ficha__nota">{{ sessao.seu_utc }}, {{ sessao.seu_fuso }}</small>
+                            {% if sessao.mestre %}<small class="ficha__nota">O mestre marcou {{ sessao.mestre }} em {{ sessao.mestre_fuso }}</small>{% endif %}
+                        {% else %}A definir{% endif %}
+                        {% if campanha.recorrencia != "unica" %}<small class="ficha__nota">{{ campanha.rotulo_recorrencia }}</small>{% endif %}
+                    </dd></div>
                     <div><dt>Vagas</dt><dd>{% include "campanhas/_assentos.html" %}</dd></div>
                 </dl>
 

@@ -74,6 +74,9 @@ def recomendar_campanhas(usuario, limite=5):
         .filter(mestre_email__ne=usuario.email)
         .filter(jogadores_inscritos_emails__ne=usuario.email)
     )
+    # Só mesas com vaga: o status é mantido coerente (Campanha.sincronizar_status),
+    # mas este filtro protege também dados gravados por versões antigas.
+    candidatas = [campanha for campanha in candidatas if campanha.vagas_livres > 0]
 
     if not candidatas:
         return []
