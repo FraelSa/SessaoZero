@@ -6,7 +6,7 @@ dnspython>=2.6
 # RF05 - recomendação de campanhas por similaridade de texto (TF-IDF)
 scikit-learn>=1.4
 
-# RF07 (parte de chat) - WebSockets para o chat em tempo real das campanhas
+# Chat em tempo real das campanhas - WebSockets
 channels>=4.0
 # Servidor ASGI necessário para os WebSockets do chat (e, quando listado em
 # INSTALLED_APPS, faz o `manage.py runserver` aceitar WebSocket também)

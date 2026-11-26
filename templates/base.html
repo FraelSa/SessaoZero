@@ -40,6 +40,7 @@
                     <a href="{% url 'listar_campanhas' %}"{% if request.resolver_match.url_name == 'listar_campanhas' %} aria-current="page"{% endif %}>Campanhas</a>
                     {% if usuario_logado %}
                         <a href="{% url 'campanhas_recomendadas' %}"{% if request.resolver_match.url_name == 'campanhas_recomendadas' %} aria-current="page"{% endif %}>Recomendadas</a>
+                        <a href="{% url 'minhas_inscricoes' %}"{% if request.resolver_match.url_name == 'minhas_inscricoes' %} aria-current="page"{% endif %}>Minhas inscrições</a>
                         <a href="{% url 'listar_notificacoes' %}"{% if request.resolver_match.url_name == 'listar_notificacoes' %} aria-current="page"{% endif %}>Notificações{% if total_notificacoes_nao_lidas %}<span class="contador" aria-label="{{ total_notificacoes_nao_lidas }} não lidas">{{ total_notificacoes_nao_lidas }}</span>{% endif %}</a>
                     {% else %}
                         <a href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} aria-current="page"{% endif %}>Entrar</a>
@@ -65,6 +66,7 @@
                             <ul class="menu__lista">
                                 <li><a class="menu__link" href="{% url 'editar_perfil' %}">Meu perfil</a></li>
                                 <li><a class="menu__link" href="{% url 'editar_preferencias' %}">Preferências</a></li>
+                                <li><a class="menu__link" href="{% url 'minha_conta' %}">Minha conta</a></li>
                             </ul>
                             {% include "partials/_acessibilidade.html" %}
                             <div class="menu__rodape">
@@ -100,7 +102,7 @@
 
     <footer class="rodape">
         <div class="rodape__miolo">
-            <p>Sessão Zero. Projeto de TCC do curso de Computação da Unijorge, 2026.</p>
+            <p>Sessão Zero. Projeto de TCC do curso de Computação da Unijorge, 2026. <a href="{% url 'politica_privacidade' %}">Política de Privacidade</a></p>
         </div>
     </footer>
 

@@ -58,6 +58,8 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    # Depois da sessão: usa o fuso horário escolhido pela pessoa logada.
+    "core.middleware.FusoHorarioMiddleware",
 ]
 
 ROOT_URLCONF = "sessao_zero.urls"
@@ -186,3 +188,7 @@ DEFAULT_FROM_EMAIL = config(
 # abrir no celular ou em outro computador, troque 127.0.0.1 pelo IP do
 # computador servidor ou pelo endereço público do site.
 SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
+
+# RNF03 - e-mail para onde as pessoas escrevem sobre os seus dados (aparece na
+# Política de Privacidade). Deixe em branco se ainda não houver um.
+CONTATO_PRIVACIDADE = config("CONTATO_PRIVACIDADE", default="")

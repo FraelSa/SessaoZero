@@ -1,5 +1,5 @@
 """
-RF07 - "o sistema deve notificar usuários de datas ou mudanças em
+RF08 - "o sistema deve notificar usuários de datas ou mudanças em
 campanhas e sessões". Cada notificação é um documento simples na coleção
 "notificacoes": para quem é, o texto, um link opcional (para levar direto
 à campanha) e se já foi lida.

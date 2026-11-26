@@ -394,6 +394,7 @@ input[type="email"],
 input[type="password"],
 input[type="number"],
 input[type="datetime-local"],
+input[type="search"],
 select,
 textarea {
   width: 100%;
@@ -454,6 +455,9 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
 
 .filtro { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem 1rem; margin-bottom: 1.5rem; }
 .filtro .campo { min-width: 15rem; margin: 0; }
+.filtro .campo--busca { flex: 1 1 20rem; }
+.resultado-busca { margin: 0 0 1rem; color: var(--tinta-suave); }
+.grupo-titulo { margin: 2rem 0 1rem; }
 
 /* ---------- Etiquetas de status e cadeiras ---------- */
 
@@ -514,6 +518,15 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
 .ficha__sistema { font-weight: 600; }
 .ficha__topo .tag { color: #fff; }
 
+.ficha__etiquetas { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.tag--classificacao { color: var(--laranja-forte); }
+.ficha__topo .tag--classificacao { color: #fff; }
+.tag--tema { color: var(--tinta-suave); font-weight: 400; }
+.classificacao { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0 0 1rem; }
+.ficha__temas { margin: 0 0 0.5rem; color: var(--tinta-suave); font-size: 0.9rem; }
+.ficha__temas span { font-weight: 600; }
+.ficha__nota { display: block; margin-top: 0.1rem; color: var(--tinta-suave); font-size: 0.85rem; font-weight: 400; }
+
 .ficha__corpo { padding: 1rem 1rem 0.25rem; }
 .ficha__titulo { margin: 0 0 0.4rem; font-size: 1.4rem; }
 .ficha__titulo a { color: var(--tinta); text-decoration: none; }
@@ -572,12 +585,14 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
   grid-template-columns: minmax(0, 1fr) 19rem;
   grid-template-areas:
     "cabeca lateral"
+    "avaliacoes lateral"
     "comentarios lateral";
   column-gap: 2.5rem;
   align-items: start;
 }
 .detalhe__cabeca { grid-area: cabeca; }
 .detalhe__comentarios { grid-area: comentarios; }
+.detalhe__avaliacoes { grid-area: avaliacoes; margin-bottom: 2rem; }
 .detalhe__sistema { margin-left: 0.5rem; font-weight: 600; }
 .texto-corrido { max-width: 65ch; margin-bottom: 2rem; }
 
@@ -589,6 +604,7 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
     grid-template-areas:
       "cabeca"
       "lateral"
+      "avaliacoes"
       "comentarios";
   }
   .lateral { position: static; margin-bottom: 2rem; }
@@ -814,3 +830,33 @@ input[type="file"]::file-selector-button {
 @media (max-width: 26rem) {
   .nav { gap: 0.25rem 0.7rem; font-size: 0.9rem; }
 }
+
+
+/* RF06 - avaliações e reputação */
+.estrelas { color: var(--destaque); letter-spacing: 0.08em; white-space: nowrap; }
+.avaliacoes { margin: 0; padding: 0; list-style: none; display: grid; gap: 1rem; }
+.avaliacao { padding: 0.9rem 1rem; border: 1.5px solid var(--linha); border-radius: var(--raio-ficha); }
+.avaliacao form { display: grid; gap: 0.7rem; justify-items: start; }
+.avaliacao__cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; font-weight: 600; }
+.avaliacao__atual { margin-left: auto; font-weight: 400; color: var(--tinta-suave); }
+.avaliacao__campos { display: grid; gap: 0.35rem; width: 100%; max-width: 32rem; }
+.avaliacao__campos label { font-weight: 600; font-size: 0.95rem; }
+.avaliacao__campos textarea { min-height: 4rem; }
+
+/* Perfil público */
+.perfil-publico__cabeca { display: flex; flex-wrap: wrap; align-items: center; gap: 1.25rem; margin-bottom: 1.5rem; }
+.perfil-publico__cabeca h1 { margin: 0; }
+.perfil-publico__reputacao { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+.reputacao { padding: 1rem; border: 1.5px solid var(--borda-forte); border-radius: var(--raio-ficha); }
+.reputacao__titulo { margin: 0 0 0.25rem; font-weight: 600; }
+.reputacao__nota { margin: 0; font-size: 1.4rem; }
+.reputacao__total { margin: 0.2rem 0 0; color: var(--tinta-suave); }
+.perfil-publico__lista { margin: 0 0 2rem; padding: 0; list-style: none; display: grid; gap: 0.75rem; }
+.perfil-publico__lista li { padding: 0.4rem 0 0.4rem 1rem; border-left: 3px solid var(--linha); }
+.perfil-publico__lista p { margin: 0.2rem 0 0; max-width: 65ch; overflow-wrap: anywhere; }
+
+/* RNF03 - política de privacidade */
+.politica h2 { margin-top: 2rem; }
+.politica p, .politica ul { max-width: 65ch; }
+.politica ul { padding-left: 1.25rem; }
+.politica li { margin-bottom: 0.5rem; }

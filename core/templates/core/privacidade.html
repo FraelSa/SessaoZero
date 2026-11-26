@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block titulo %}Política de Privacidade - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel painel--larga politica">
+        <h1>Política de Privacidade</h1>
+        <p class="campo__ajuda">Versão {{ versao }}. Vale para o aplicativo web Sessão Zero.</p>
+
+        <h2>Quem somos</h2>
+        <p>A Sessão Zero é uma rede social para jogadores de RPG de mesa organizarem campanhas, desenvolvida como Trabalho de Conclusão de Curso do curso de Computação da Unijorge (2026). Esta página explica quais dados pessoais o aplicativo trata, para quê, e como você controla os seus dados, em linha com a Lei Geral de Proteção de Dados (LGPD, Lei nº 13.709/2018).</p>
+
+        <h2>Que dados tratamos e para quê</h2>
+        <ul>
+            <li><strong>Cadastro:</strong> nome de usuário, e-mail e senha. Servem para criar a conta, confirmar o e-mail, entrar no aplicativo e recuperar o acesso. A senha nunca é guardada: guardamos só um código irreversível dela (hash PBKDF2).</li>
+            <li><strong>Avatar:</strong> um desenho escolhido ou uma foto enviada por você. A foto é recortada em quadrado, reduzida a 256 por 256 pixels e regravada em JPEG, o que descarta metadados como a localização do GPS.</li>
+            <li><strong>Preferências:</strong> sistemas e estilos de RPG favoritos, fuso horário e a escolha de receber avisos por e-mail. Servem para recomendar campanhas e mostrar os horários no seu fuso.</li>
+            <li><strong>O que você publica:</strong> campanhas (título, sinopse, sistema, classificação indicativa, data da sessão), inscrições, comentários, mensagens de chat e avaliações de outras pessoas.</li>
+            <li><strong>Avisos:</strong> as notificações que o aplicativo gera para você (nova inscrição, mudança de data, avaliação recebida e semelhantes) e, se você deixar ligado, o e-mail correspondente.</li>
+            <li><strong>Moderação:</strong> quando o filtro barra uma mensagem, comentário ou avaliação, guardamos o texto, o motivo e o e-mail do autor, para revisão e para proteger a comunidade.</li>
+        </ul>
+        <p>Não pedimos a sua idade, o seu nome real nem a sua localização, e o aplicativo não usa anúncios nem ferramentas de análise de audiência.</p>
+
+        <h2>O que os outros veem</h2>
+        <ul>
+            <li><strong>Público, até para quem não tem conta:</strong> as campanhas e os comentários, o seu nome de usuário e avatar, e a sua página de perfil, com as avaliações que você recebeu e as campanhas que você mestra.</li>
+            <li><strong>Só o mestre e os inscritos de cada campanha:</strong> o chat daquela campanha.</li>
+            <li><strong>Só você:</strong> o seu e-mail, as preferências e os avisos. O seu e-mail não aparece para outras pessoas.</li>
+        </ul>
+
+        <h2>Com quem os dados passam</h2>
+        <ul>
+            <li><strong>Banco de dados:</strong> os dados ficam em um MongoDB, no servidor do projeto ou em um serviço de nuvem (MongoDB Atlas), conforme a instalação.</li>
+            <li><strong>E-mail:</strong> a confirmação de cadastro, a recuperação de senha e os avisos são enviados por um servidor de e-mail (SMTP) configurado pelo projeto, que recebe o seu endereço e o texto da mensagem.</li>
+            <li><strong>Fontes:</strong> as páginas carregam fontes do Google Fonts, então o seu navegador se conecta a servidores do Google ao abri-las.</li>
+        </ul>
+        <p>Não vendemos nem cedemos os seus dados para fins comerciais.</p>
+
+        <h2>Cookies e armazenamento no navegador</h2>
+        <p>Usamos dois cookies necessários para o funcionamento: o de sessão, que mantém você logado, e o de proteção contra formulários forjados (CSRF). Guardamos também, no próprio navegador, as suas escolhas de modo noturno e de texto maior; elas não são enviadas ao servidor.</p>
+
+        <h2>Por quanto tempo guardamos</h2>
+        <p>Guardamos os seus dados enquanto a conta existir. Cadastros que não foram confirmados por e-mail expiram sozinhos em 24 horas, e os links de recuperação de senha valem por 1 hora. Quando você exclui a conta:</p>
+        <ul>
+            <li>as campanhas que você mestra são apagadas, com as mensagens de chat, e os inscritos são avisados;</li>
+            <li>as suas inscrições em outras campanhas são removidas;</li>
+            <li>os seus comentários, mensagens de chat e avaliações escritas continuam, mas sem o seu nome e e-mail (aparecem como "[conta excluída]");</li>
+            <li>as avaliações que você recebeu, a foto, os avisos e o seu cadastro são apagados.</li>
+        </ul>
+
+        <h2>Os seus direitos</h2>
+        <p>A LGPD (art. 18) garante, entre outros, estes direitos, que você exerce direto no aplicativo, depois de entrar:</p>
+        <ul>
+            <li><strong>Acesso e portabilidade:</strong> <a href="{% url 'exportar_dados' %}">Exportar meus dados</a> baixa tudo o que guardamos sobre você em um arquivo JSON.</li>
+            <li><strong>Correção:</strong> altere o avatar em <a href="{% url 'editar_perfil' %}">Perfil</a> e as preferências e o fuso horário em <a href="{% url 'editar_preferencias' %}">Preferências</a>. Para mudar o nome de usuário ou o e-mail, fale com a equipe.</li>
+            <li><strong>Eliminação:</strong> <a href="{% url 'excluir_conta' %}">Excluir conta</a>, como descrito acima.</li>
+            <li><strong>Informação sobre o tratamento e o compartilhamento:</strong> esta página.</li>
+            <li><strong>Revogação do consentimento:</strong> você pode desligar os avisos por e-mail em Preferências, ou excluir a conta.</li>
+        </ul>
+        <p>Você também pode reclamar à Autoridade Nacional de Proteção de Dados (ANPD).</p>
+
+        <h2>Segurança</h2>
+        <p>As senhas são guardadas só como hash, com validação de força no cadastro; cada formulário tem proteção contra requisições forjadas (CSRF); o chat só aceita quem participa da campanha; e a moderação filtra mensagens, comentários e avaliações. Nenhum sistema é totalmente seguro, e a proteção da conexão (HTTPS) depende de como o aplicativo for publicado.</p>
+
+        <h2>Crianças e adolescentes</h2>
+        <p>O cadastro não pede a idade. A classificação indicativa das campanhas é informada pelo mestre e orienta quem vai jogar, mas o aplicativo não impede ninguém de se inscrever. Crianças e adolescentes devem usar o serviço com o conhecimento e o acompanhamento de pais ou responsáveis.</p>
+
+        <h2>Contato</h2>
+        {% if contato %}
+            <p>Para assuntos sobre os seus dados pessoais, escreva para <a href="mailto:{{ contato }}">{{ contato }}</a>.</p>
+        {% else %}
+            <p>Para assuntos sobre os seus dados pessoais, fale com a equipe do projeto Sessão Zero. As ações de acesso, exportação e exclusão estão disponíveis direto em <a href="{% url 'minha_conta' %}">Minha conta</a>.</p>
+        {% endif %}
+
+        <h2>Mudanças nesta política</h2>
+        <p>Quando esta política mudar, a versão e o texto são atualizados nesta página. Quem se cadastra concorda com a versão em vigor naquele dia, e o aplicativo guarda a data e a versão do aceite.</p>
+    </section>
+{% endblock %}

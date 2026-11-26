@@ -1,0 +1,5 @@
+# Só para rodar os testes (python manage.py test). Não é preciso em produção.
+-r requirements.txt
+
+# MongoDB simulado em memória: os testes não tocam no MongoDB real.
+mongomock>=4.1

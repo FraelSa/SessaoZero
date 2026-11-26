@@ -1,8 +1,11 @@
+from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from mongoengine.connection import get_db
 
 from campanhas.models import Campanha
+
+from . import politica
 
 
 def home(request):
@@ -15,6 +18,15 @@ def home(request):
         campanhas_recentes = []
 
     return render(request, "core/home.html", {"campanhas_recentes": campanhas_recentes})
+
+
+def politica_privacidade(request):
+    """RNF03 - Política de Privacidade (pública, sem precisar de login)."""
+    return render(
+        request,
+        "core/privacidade.html",
+        {"versao": politica.VERSAO, "contato": settings.CONTATO_PRIVACIDADE},
+    )
 
 
 def status_mongo(request):
