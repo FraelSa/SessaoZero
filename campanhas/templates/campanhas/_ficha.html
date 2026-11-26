@@ -1,7 +1,8 @@
-{% load horario %}<article class="ficha">
+{% load horario papeis %}{% with papel=campanha|papel_de:usuario_logado %}<article class="ficha{% if papel and not sem_papel %} ficha--{{ papel }}{% endif %}">
     <header class="ficha__topo">
-        <span class="ficha__sistema">{{ campanha.sistema_rpg }}</span>
+        <span class="ficha__sistema">{{ campanha.sistema_rpg }}{% if campanha.tem_sistema_proprio %} <small class="ficha__sistema-nota">(sistema próprio)</small>{% endif %}</span>
         <span class="ficha__etiquetas">
+            {% if papel and not sem_papel %}<span class="tag tag--papel">{% if papel == "mestre" %}Você é o mestre{% else %}✓ Você está inscrito{% endif %}</span>{% endif %}
             {% if campanha.classificacao %}<span class="tag tag--classificacao" title="Classificação indicativa">{{ campanha.rotulo_classificacao }}</span>{% endif %}
             <span class="tag tag--{{ campanha.status }}">{{ campanha.status|capfirst }}</span>
         </span>
@@ -16,4 +17,4 @@
         <div><dt>Próxima sessão</dt><dd>{% if campanha.proxima_sessao %}{{ campanha.proxima_sessao|local|date:"d/m/Y, H:i" }}{% else %}A definir{% endif %}{% if campanha.recorrencia != "unica" %}<small class="ficha__nota">{{ campanha.rotulo_recorrencia }}</small>{% endif %}</dd></div>
         <div><dt>Vagas</dt><dd>{% include "campanhas/_assentos.html" %}</dd></div>
     </dl>
-</article>
+</article>{% endwith %}

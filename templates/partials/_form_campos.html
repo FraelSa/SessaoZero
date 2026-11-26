@@ -1,26 +1,27 @@
 {% if form.non_field_errors %}
-    <p class="campo__erro" role="alert">{{ form.non_field_errors|striptags }}</p>
+    <ul class="campo__erros" role="alert">{% for erro in form.non_field_errors %}<li>{{ erro }}</li>{% endfor %}</ul>
 {% endif %}
 {% for field in form %}
     {% if field.widget_type == "checkboxselectmultiple" %}
-        <fieldset class="campo">
+        <fieldset class="campo" data-campo="{{ field.name }}">
             <legend>{{ field.label }}</legend>
             <div class="opcoes">{{ field }}</div>
             {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
-            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+            {% include "partials/_erros_campo.html" %}
         </fieldset>
     {% elif field.widget_type == "checkbox" %}
-        <div class="campo">
+        <div class="campo" data-campo="{{ field.name }}">
             <label class="opcao-unica" for="{{ field.id_for_label }}">{{ field }}<span>{{ field.label }}</span></label>
             {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
-            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+            {% include "partials/_erros_campo.html" %}
         </div>
     {% else %}
-        <div class="campo">
+        <div class="campo" data-campo="{{ field.name }}">
             <label for="{{ field.id_for_label }}">{{ field.label }}</label>
             {{ field }}
             {% if field.help_text %}<p class="campo__ajuda">{{ field.help_text }}</p>{% endif %}
-            {% if field.errors %}<p class="campo__erro">{{ field.errors|striptags }}</p>{% endif %}
+            {% if field.field.indicador_senha %}{% include "partials/_forca_senha.html" %}{% endif %}
+            {% include "partials/_erros_campo.html" %}
         </div>
     {% endif %}
 {% endfor %}

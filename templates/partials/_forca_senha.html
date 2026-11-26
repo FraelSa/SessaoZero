@@ -1,0 +1,12 @@
+{% load static %}{# Indicador de força da senha. Fica escondido sem JavaScript: aí valem o texto de ajuda e os erros do formulário. #}
+<div class="forca-senha" id="forca-{{ field.auto_id }}" data-forca-senha data-url="{% url 'verificar_senha' %}" data-nivel="0" hidden>
+    <span class="forca-senha__barra" aria-hidden="true"><span></span><span></span><span></span></span>
+    <p class="forca-senha__estado" data-estado aria-live="polite">Digite uma senha.</p>
+    <ul class="forca-senha__lista">
+        <li data-criterio="tamanho">De 8 a 128 caracteres</li>
+        <li data-criterio="letras">Não é só números</li>
+        <li data-criterio="comum">Não é uma senha muito comum</li>
+        <li data-criterio="confere">As duas senhas são iguais</li>
+    </ul>
+</div>
+<script src="{% static 'core/js/forca_senha.js' %}?v={{ versao_css }}" defer></script>

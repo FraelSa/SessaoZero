@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block titulo %}{{ titulo_pagina }} - Sessão Zero{% endblock %}
 
@@ -16,4 +17,5 @@
             </div>
         </form>
     </section>
+    <script src="{% static 'core/js/campanha_form.js' %}?v={{ versao_css }}" defer></script>
 {% endblock %}

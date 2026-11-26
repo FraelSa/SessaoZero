@@ -34,8 +34,15 @@ SISTEMAS_RPG_COMUNS = (
     "Shadowrun",
     "Savage Worlds",
     "Daggerheart",
-    "Outro",
+    "Sistema Próprio",
 )
+
+# Opção para mesas com sistema criado pelo mestre (ou que não está na lista).
+# Quem escolhe digita o nome, e é esse nome que fica gravado na campanha.
+# Campanhas antigas podem ter "Outro", a opção que existia antes desta.
+SISTEMA_PROPRIO = "Sistema Próprio"
+SISTEMAS_DA_LISTA = tuple(s for s in SISTEMAS_RPG_COMUNS if s != SISTEMA_PROPRIO)
+SISTEMA_NOME_MAX = 60
 
 STATUS_CAMPANHA = ("aberta", "lotada", "encerrada")
 
@@ -69,7 +76,8 @@ class Campanha(Document):
     # RF02 - criar, editar e excluir campanhas/sessões
     titulo = StringField(required=True, max_length=120)
     sinopse = StringField(required=True, max_length=3000)
-    sistema_rpg = StringField(required=True, choices=SISTEMAS_RPG_COMUNS)
+    # Um dos SISTEMAS_DA_LISTA ou o nome digitado para um sistema próprio.
+    sistema_rpg = StringField(required=True, max_length=SISTEMA_NOME_MAX)
 
     # RD03 - classificação indicativa. É None nas campanhas criadas antes deste
     # campo existir; o mestre escolhe uma na próxima edição.
@@ -105,6 +113,10 @@ class Campanha(Document):
         "indexes": ["mestre_email", "sistema_rpg", "status"],
         "ordering": ["-criado_em"],
     }
+
+    @property
+    def tem_sistema_proprio(self):
+        return self.sistema_rpg not in SISTEMAS_DA_LISTA
 
     @property
     def vagas_livres(self):

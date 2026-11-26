@@ -6,12 +6,16 @@ import secrets
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.http import Http404, HttpResponse
+from django.contrib.auth.password_validation import get_default_password_validators
+from django.core.exceptions import ValidationError
+from django.http import Http404, HttpResponse, JsonResponse
 from django.contrib import messages
 from django.core.mail import send_mail
 from django.shortcuts import redirect, render
 from django.templatetags.static import static
 from django.urls import reverse
+from django.views.decorators.cache import never_cache
+from django.views.decorators.http import require_POST
 from mongoengine.errors import NotUniqueError
 
 from campanhas.avaliacoes import avaliacoes_recebidas, reputacao
@@ -26,6 +30,7 @@ from .exportacao import montar_exportacao
 from .exclusao import resumo_da_exclusao
 from .forms import (
     ESTILOS_PREFERENCIA,
+    SENHA_MAX_CARACTERES,
     SISTEMAS_PREFERENCIA,
     AlterarSenhaForm,
     CadastroForm,
@@ -44,6 +49,29 @@ DURACAO_TOKEN_CONFIRMACAO = datetime.timedelta(hours=24)
 INTERVALO_REENVIO = datetime.timedelta(seconds=60)
 
 logger = logging.getLogger(__name__)
+
+
+@never_cache
+@require_POST
+def verificar_senha(request):
+    """Usada pelo indicador de força da senha enquanto a pessoa digita. Passa a
+    senha pelos mesmos validadores do formulário (AUTH_PASSWORD_VALIDATORS) e
+    diz quais regras ela cumpre. Nada é gravado nem registrado em log."""
+    senha = request.POST.get("senha", "")
+    codigos = set()
+    for validador in get_default_password_validators():
+        try:
+            validador.validate(senha)
+        except ValidationError as erro:
+            codigos.update(e.code for e in erro.error_list)
+    criterios = {
+        "tamanho": "password_too_short" not in codigos
+        and len(senha) <= SENHA_MAX_CARACTERES,
+        "letras": "password_entirely_numeric" not in codigos,
+        "comum": "password_too_common" not in codigos,
+    }
+    valida = not codigos and len(senha) <= SENHA_MAX_CARACTERES
+    return JsonResponse({**criterios, "valida": valida})
 
 
 def _email_vai_para_o_terminal():

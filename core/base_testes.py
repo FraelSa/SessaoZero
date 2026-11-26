@@ -8,6 +8,7 @@ o Atlas sem tocar em nenhum dado.
 """
 
 import mongomock
+from django.conf import settings
 from django.test import TestCase
 from mongoengine import connect, disconnect
 
@@ -64,6 +65,9 @@ class MongoTestCase(TestCase):
         sessao = self.client.session
         sessao["usuario_id"] = str(usuario.id)
         sessao.save()
+        # A sessão fica num cookie assinado (SESSION_ENGINE em settings.py):
+        # depois de salvar, o conteúdo novo só chega ao site pelo cookie.
+        self.client.cookies[settings.SESSION_COOKIE_NAME] = sessao.session_key
 
     def criar_campanha(self, mestre, **extras):
         dados = dict(

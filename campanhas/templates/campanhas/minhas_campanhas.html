@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+
+{% block titulo %}Minhas campanhas - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="pagina-topo">
+        <h1>Minhas campanhas</h1>
+        <a class="botao" href="{% url 'criar_campanha' %}">Criar campanha</a>
+    </div>
+
+    {% if total == 0 %}
+        <p class="vazio">
+            Você ainda não criou nenhuma campanha. Quando criar uma, ela aparece
+            aqui e você vira o mestre da mesa.
+        </p>
+    {% else %}
+        <p class="resultado-busca">
+            {% if total == 1 %}Você é mestre de 1 campanha.{% else %}Você é mestre de {{ total }} campanhas.{% endif %}
+        </p>
+
+        {% if ativas %}
+            {% for campanha in ativas %}
+                {% include "campanhas/_ficha.html" with sem_papel=True %}
+            {% endfor %}
+        {% endif %}
+
+        {% if encerradas %}
+            <h2 class="grupo-titulo">Encerradas</h2>
+            {% for campanha in encerradas %}
+                {% include "campanhas/_ficha.html" with sem_papel=True %}
+            {% endfor %}
+        {% endif %}
+    {% endif %}
+{% endblock %}

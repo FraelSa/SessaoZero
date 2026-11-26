@@ -40,8 +40,12 @@
                     <a href="{% url 'listar_campanhas' %}"{% if request.resolver_match.url_name == 'listar_campanhas' %} aria-current="page"{% endif %}>Campanhas</a>
                     {% if usuario_logado %}
                         <a href="{% url 'campanhas_recomendadas' %}"{% if request.resolver_match.url_name == 'campanhas_recomendadas' %} aria-current="page"{% endif %}>Recomendadas</a>
+                        <a href="{% url 'minhas_campanhas' %}"{% if request.resolver_match.url_name == 'minhas_campanhas' %} aria-current="page"{% endif %}>Minhas campanhas</a>
                         <a href="{% url 'minhas_inscricoes' %}"{% if request.resolver_match.url_name == 'minhas_inscricoes' %} aria-current="page"{% endif %}>Minhas inscrições</a>
-                        <a href="{% url 'listar_notificacoes' %}"{% if request.resolver_match.url_name == 'listar_notificacoes' %} aria-current="page"{% endif %}>Notificações{% if total_notificacoes_nao_lidas %}<span class="contador" aria-label="{{ total_notificacoes_nao_lidas }} não lidas">{{ total_notificacoes_nao_lidas }}</span>{% endif %}</a>
+                        <a class="sino" href="{% url 'listar_notificacoes' %}"{% if request.resolver_match.url_name == 'listar_notificacoes' %} aria-current="page"{% endif %} title="Notificações" aria-label="Notificações{% if total_notificacoes_nao_lidas %}: {{ total_notificacoes_nao_lidas }} não lida{{ total_notificacoes_nao_lidas|pluralize }}{% endif %}">
+                            <svg class="sino__icone" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16.5V11a6 6 0 0 1 12 0v5.5l1.8 1.8H4.2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 20.8a2.2 2.2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                            {% if total_notificacoes_nao_lidas %}<span class="contador" aria-hidden="true">{{ total_notificacoes_nao_lidas }}</span>{% endif %}
+                        </a>
                     {% else %}
                         <a href="{% url 'login' %}"{% if request.resolver_match.url_name == 'login' %} aria-current="page"{% endif %}>Entrar</a>
                         <a class="botao" href="{% url 'cadastro' %}">Criar conta</a>
