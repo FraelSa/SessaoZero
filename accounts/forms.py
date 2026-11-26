@@ -8,7 +8,7 @@ from django import forms
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
 
-from campanhas.models import SISTEMAS_RPG_COMUNS
+from campanhas.models import SISTEMAS_DA_LISTA
 from core.horario import FUSOS_HORARIOS
 
 from .avatares import AVATARES_PRONTOS
@@ -17,7 +17,7 @@ from .models import Usuario
 
 # Opções da tela de preferências. Os sistemas vêm da mesma lista usada ao
 # criar campanhas, assim o que o usuário marca aqui combina com o que existe.
-SISTEMAS_PREFERENCIA = [s for s in SISTEMAS_RPG_COMUNS if s != "Outro"]
+SISTEMAS_PREFERENCIA = list(SISTEMAS_DA_LISTA)
 ESTILOS_PREFERENCIA = (
     "Terror",
     "Investigação",
@@ -34,12 +34,46 @@ ESTILOS_PREFERENCIA = (
 )
 
 
+# Regras de senha mostradas na tela. O mínimo de 8 caracteres, a recusa de
+# senhas só com números e a de senhas comuns vêm de AUTH_PASSWORD_VALIDATORS
+# (settings.py); o máximo é deste formulário.
+SENHA_MAX_CARACTERES = 128
+AJUDA_SENHA = (
+    f"De 8 a {SENHA_MAX_CARACTERES} caracteres. "
+    "Não pode ser só números nem uma senha muito comum."
+)
+
+
+def campo_senha_nova(rotulo):
+    """Campo de senha nova com o indicador de força (partials/_forca_senha.html)."""
+    campo = forms.CharField(
+        label=rotulo,
+        max_length=SENHA_MAX_CARACTERES,
+        help_text=AJUDA_SENHA,
+        widget=forms.PasswordInput(attrs={"autocomplete": "new-password", "data-senha-nova": ""}),
+        error_messages={
+            "max_length": f"A senha pode ter no máximo {SENHA_MAX_CARACTERES} caracteres."
+        },
+    )
+    campo.indicador_senha = True
+    return campo
+
+
+def campo_confirmar_senha(rotulo):
+    return forms.CharField(
+        label=rotulo,
+        widget=forms.PasswordInput(
+            attrs={"autocomplete": "new-password", "data-senha-confirmar": ""}
+        ),
+    )
+
+
 class CadastroForm(forms.Form):
     # RF01 - criação de conta
     username = forms.CharField(label="Nome de usuário", max_length=30, min_length=3)
     email = forms.EmailField(label="E-mail")
-    senha = forms.CharField(label="Senha", widget=forms.PasswordInput)
-    confirmar_senha = forms.CharField(label="Confirmar senha", widget=forms.PasswordInput)
+    senha = campo_senha_nova("Senha")
+    confirmar_senha = campo_confirmar_senha("Confirmar senha")
     # RNF03 - o aceite da Política de Privacidade é obrigatório para criar a conta
     aceite_politica = forms.BooleanField(
         label="Li e concordo com a Política de Privacidade",
@@ -128,10 +162,8 @@ class SolicitarRecuperacaoForm(forms.Form):
 
 class RedefinirSenhaForm(forms.Form):
     # RF04 - segundo passo: escolher a nova senha
-    nova_senha = forms.CharField(label="Nova senha", widget=forms.PasswordInput)
-    confirmar_nova_senha = forms.CharField(
-        label="Confirmar nova senha", widget=forms.PasswordInput
-    )
+    nova_senha = campo_senha_nova("Nova senha")
+    confirmar_nova_senha = campo_confirmar_senha("Confirmar nova senha")
 
     def clean_nova_senha(self):
         senha = self.cleaned_data["nova_senha"]
@@ -189,11 +221,12 @@ class PerfilForm(forms.Form):
 
 class AlterarSenhaForm(forms.Form):
     # RF01 - editar a conta: trocar a senha estando logado
-    senha_atual = forms.CharField(label="Senha atual", widget=forms.PasswordInput)
-    nova_senha = forms.CharField(label="Nova senha", widget=forms.PasswordInput)
-    confirmar_nova_senha = forms.CharField(
-        label="Confirmar nova senha", widget=forms.PasswordInput
+    senha_atual = forms.CharField(
+        label="Senha atual",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
     )
+    nova_senha = campo_senha_nova("Nova senha")
+    confirmar_nova_senha = campo_confirmar_senha("Confirmar nova senha")
 
     def __init__(self, *args, usuario, **kwargs):
         super().__init__(*args, **kwargs)

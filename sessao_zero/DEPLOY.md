@@ -31,17 +31,14 @@ Nos exemplos abaixo, troque `seusite.com.br` pelo seu domínio de verdade.
 ## 1. Colocar os arquivos novos no GitHub
 
 O Render lê o projeto direto do GitHub (`FraelSa/SessaoZero`), na branch
-`main`. Estes arquivos precisam estar lá:
+`main`, e roda a partir da **raiz** do repositório: o `manage.py`, o
+`requirements.txt` e as pastas `accounts/`, `campanhas/`, `core/`… que ficam
+lá. As configurações ficam em `sessao_zero/settings.py`, e o `.env` local fica
+ao lado dele (`sessao_zero/.env`).
 
-- `render.yaml` (na **raiz** do repositório, fora da pasta `sessao_zero/`)
-- `sessao_zero/requirements.txt`
-- `sessao_zero/sessao_zero/settings.py`
-- `sessao_zero/core/management/commands/testar_email.py`
-- `sessao_zero/accounts/templates/accounts/verifique_email.html`
-- `sessao_zero/DEPLOY.md` (este arquivo)
-
-O Render usa só a pasta `sessao_zero/`. As cópias antigas que estão na raiz do
-repositório (`accounts/`, `core/`, `manage.py`…) são ignoradas.
+Dentro da pasta `sessao_zero/` também existe uma cópia antiga do projeto
+inteiro (com outro `manage.py` e outra pasta `sessao_zero/sessao_zero/`). Ela
+não é usada pelo site: altere sempre os arquivos da raiz.
 
 ## 2. Banco de dados: MongoDB Atlas
 

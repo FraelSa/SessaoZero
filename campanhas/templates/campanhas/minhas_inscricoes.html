@@ -21,21 +21,21 @@
         {% if proximas %}
             <h2 class="grupo-titulo">Próximas sessões</h2>
             {% for campanha in proximas %}
-                {% include "campanhas/_ficha.html" %}
+                {% include "campanhas/_ficha.html" with sem_papel=True %}
             {% endfor %}
         {% endif %}
 
         {% if sem_data %}
             <h2 class="grupo-titulo">Sem data definida</h2>
             {% for campanha in sem_data %}
-                {% include "campanhas/_ficha.html" %}
+                {% include "campanhas/_ficha.html" with sem_papel=True %}
             {% endfor %}
         {% endif %}
 
         {% if realizadas %}
             <h2 class="grupo-titulo">Sessões já realizadas</h2>
             {% for campanha in realizadas %}
-                {% include "campanhas/_ficha.html" %}
+                {% include "campanhas/_ficha.html" with sem_papel=True %}
             {% endfor %}
         {% endif %}
     {% endif %}

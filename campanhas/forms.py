@@ -2,15 +2,31 @@ from django import forms
 
 from core.horario import RECORRENCIAS
 
-from .models import CLASSIFICACOES_INDICATIVAS, SISTEMAS_RPG_COMUNS, TEMAS_SENSIVEIS
+from .models import (
+    CLASSIFICACOES_INDICATIVAS,
+    SISTEMA_NOME_MAX,
+    SISTEMA_PROPRIO,
+    SISTEMAS_RPG_COMUNS,
+    TEMAS_SENSIVEIS,
+)
 
 
 class CampanhaForm(forms.Form):
     # RF02 - criar/editar campanhas e sessões
     titulo = forms.CharField(label="Título", max_length=120)
+    # RD01 - a mesa pode usar um sistema da lista ou um sistema próprio. Ao
+    # escolher "Sistema Próprio", o campo abaixo aparece (campanha_form.js)
+    # para digitar o nome.
     sistema_rpg = forms.ChoiceField(
         label="Sistema de RPG",
         choices=[(sistema, sistema) for sistema in SISTEMAS_RPG_COMUNS],
+        widget=forms.Select(attrs={"data-sistema-proprio": SISTEMA_PROPRIO}),
+    )
+    sistema_proprio = forms.CharField(
+        label="Nome do sistema",
+        required=False,
+        max_length=SISTEMA_NOME_MAX,
+        help_text="Só para “Sistema Próprio”: escreva o nome do sistema que a mesa vai usar.",
     )
     sinopse = forms.CharField(
         label="Sinopse", max_length=3000, widget=forms.Textarea(attrs={"rows": 6})
@@ -67,8 +83,22 @@ class CampanhaForm(forms.Form):
             )
         return vagas
 
+    @property
+    def sistema_escolhido(self):
+        """O que é gravado em Campanha.sistema_rpg: o sistema da lista ou o
+        nome digitado para o sistema próprio."""
+        dados = self.cleaned_data
+        if dados["sistema_rpg"] == SISTEMA_PROPRIO:
+            return dados["sistema_proprio"]
+        return dados["sistema_rpg"]
+
     def clean(self):
         dados = super().clean()
+        if dados.get("sistema_rpg") == SISTEMA_PROPRIO:
+            nome = (dados.get("sistema_proprio") or "").strip()
+            dados["sistema_proprio"] = nome
+            if not nome and "sistema_proprio" not in self.errors:
+                self.add_error("sistema_proprio", "Escreva o nome do sistema próprio.")
         if (
             dados.get("recorrencia", "unica") != "unica"
             and not dados.get("data_sessao")

@@ -5,8 +5,9 @@ services:
     name: sessao-zero
     runtime: python
     plan: free
-    # O projeto Django completo fica na pasta sessao_zero/ do repositório.
-    rootDir: sessao_zero
+    # O projeto Django roda a partir da raiz do repositório (onde fica o
+    # manage.py). A pasta sessao_zero/ guarda só as configurações
+    # (settings.py, urls.py, asgi.py).
     buildCommand: pip install -r requirements.txt && python manage.py collectstatic --noinput
     # O disco do Render é apagado a cada reinício, então as tabelas internas do
     # Django (SQLite) são recriadas aqui. O daphne atende HTTP e o WebSocket do chat.

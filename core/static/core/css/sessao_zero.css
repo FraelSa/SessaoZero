@@ -205,6 +205,20 @@ p { margin: 0 0 1em; }
 .nav a:not(.botao):hover { border-bottom-color: rgba(255, 255, 255, 0.55); }
 .nav a[aria-current="page"]:not(.botao) { border-bottom-color: var(--laranja); }
 
+/* Notificações: um sino com o número de avisos não lidos no canto. */
+.nav a.sino { position: relative; display: inline-flex; align-items: center; padding: 0.3rem 0.2rem; }
+.sino__icone { width: 1.45rem; height: 1.45rem; }
+.sino .contador {
+  position: absolute;
+  top: -0.2rem;
+  right: -0.65rem;
+  min-width: 1.15rem;
+  margin: 0;
+  padding: 0 0.3rem;
+  font-size: 0.72rem;
+  line-height: 1.15rem;
+}
+
 .nav .botao { min-height: 2.5rem; padding: 0.4rem 1rem; border-color: var(--laranja); background: var(--laranja); color: var(--sobre-laranja); }
 .nav .botao:hover { border-color: var(--laranja); background: var(--laranja); color: var(--sobre-laranja); filter: brightness(1.08); }
 .topo :focus-visible { outline-color: #fff; }
@@ -411,6 +425,50 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
 .campo__ajuda { margin: 0.3rem 0 0; color: var(--tinta-suave); font-size: 0.9rem; }
 .campo__erro { margin: 0.3rem 0 0; color: var(--perigo); font-size: 0.9rem; font-weight: 600; }
 
+/* Um erro por linha, cada um com seu marcador, para não virarem um bloco só. */
+.campo__erros {
+  display: grid;
+  gap: 0.35rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: var(--perigo);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.campo__erros li { position: relative; padding-left: 1.2rem; }
+.campo__erros li::before { content: "!"; position: absolute; left: 0.3rem; font-weight: 700; }
+.caixa > .campo__erros { margin: 0 0 1rem; }
+
+/* ---------- Indicador de força da senha ---------- */
+
+.forca-senha { margin-top: 0.6rem; }
+.forca-senha__barra { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.3rem; }
+.forca-senha__barra span { height: 0.4rem; border-radius: 999px; background: var(--linha); transition: background-color 0.2s; }
+.forca-senha[data-nivel="1"] .forca-senha__barra span:nth-child(-n+1) { background: var(--perigo); }
+.forca-senha[data-nivel="2"] .forca-senha__barra span:nth-child(-n+2) { background: var(--laranja); }
+.forca-senha[data-nivel="3"] .forca-senha__barra span { background: var(--sucesso); }
+
+.forca-senha__estado { margin: 0.45rem 0 0.35rem; color: var(--tinta-suave); font-size: 0.9rem; font-weight: 600; }
+.forca-senha[data-aceitavel="sim"] .forca-senha__estado { color: var(--sucesso); }
+
+.forca-senha__lista { display: grid; gap: 0.2rem; margin: 0; padding: 0; list-style: none; font-size: 0.9rem; color: var(--tinta-suave); }
+.forca-senha__lista li { position: relative; padding-left: 1.4rem; }
+.forca-senha__lista li::before {
+  content: "";
+  position: absolute;
+  left: 0.15rem;
+  top: 0.3em;
+  width: 0.75rem;
+  height: 0.75rem;
+  border: 1.5px solid currentColor;
+  border-radius: 50%;
+}
+.forca-senha__lista li[data-ok="sim"] { color: var(--sucesso); }
+.forca-senha__lista li[data-ok="sim"]::before { content: "✓"; border: 0; top: 0; width: auto; height: auto; font-weight: 700; }
+.forca-senha__lista li[data-ok="nao"] { color: var(--perigo); }
+.forca-senha__lista li[data-ok="nao"]::before { content: "✗"; border: 0; top: 0; width: auto; height: auto; font-weight: 700; }
+
 .acoes { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-top: 1.5rem; }
 
 /* ---------- Páginas de formulário (painel) ---------- */
@@ -516,7 +574,14 @@ textarea { min-height: 7rem; padding-top: 0.6rem; resize: vertical; }
   color: var(--cabecalho-texto);
 }
 .ficha__sistema { font-weight: 600; }
+.ficha__sistema-nota { font-weight: 400; opacity: 0.85; }
 .ficha__topo .tag { color: #fff; }
+
+/* Campanhas em que a pessoa logada é mestre ou está inscrita: borda e selo
+   laranja, para se destacarem na lista. */
+.ficha--jogador,
+.ficha--mestre { border-color: var(--laranja); box-shadow: inset 4px 0 0 var(--laranja); }
+.ficha__topo .tag--papel { border-color: var(--laranja); background: var(--laranja); color: var(--sobre-laranja); }
 
 .ficha__etiquetas { display: inline-flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
 .tag--classificacao { color: var(--laranja-forte); }

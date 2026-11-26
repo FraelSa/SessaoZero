@@ -5,6 +5,7 @@ from . import views
 urlpatterns = [
     path("", views.listar_campanhas, name="listar_campanhas"),
     path("recomendadas/", views.campanhas_recomendadas, name="campanhas_recomendadas"),
+    path("minhas/", views.minhas_campanhas, name="minhas_campanhas"),
     path("inscricoes/", views.minhas_inscricoes, name="minhas_inscricoes"),
     path("nova/", views.criar_campanha, name="criar_campanha"),
     path("<str:campanha_id>/", views.detalhe_campanha, name="detalhe_campanha"),

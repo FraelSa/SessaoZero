@@ -27,7 +27,7 @@ from .avaliacoes import (
 )
 from .busca import MAX_CARACTERES, filtrar_por_palavras
 from .forms import AvaliacaoForm, CampanhaForm, ComentarioForm
-from .models import SISTEMAS_RPG_COMUNS, Campanha
+from .models import SISTEMA_PROPRIO, SISTEMAS_DA_LISTA, SISTEMAS_RPG_COMUNS, Campanha
 from .recomendacoes import recomendar_campanhas
 from .utils import buscar_campanha_ou_404
 
@@ -49,7 +49,10 @@ def listar_campanhas(request):
     campanhas = Campanha.objects.order_by("-criado_em")
 
     sistema_filtro = request.GET.get("sistema", "")
-    if sistema_filtro:
+    if sistema_filtro == SISTEMA_PROPRIO:
+        # Sistemas próprios ficam gravados com o nome que o mestre digitou.
+        campanhas = campanhas.filter(sistema_rpg__nin=SISTEMAS_DA_LISTA)
+    elif sistema_filtro:
         campanhas = campanhas.filter(sistema_rpg=sistema_filtro)
 
     busca = request.GET.get("q", "").strip()[:MAX_CARACTERES]
@@ -65,6 +68,24 @@ def listar_campanhas(request):
             "sistemas": SISTEMAS_RPG_COMUNS,
             "busca": busca,
             "total": campanhas.count() if (busca or sistema_filtro) else None,
+        },
+    )
+
+
+@login_obrigatorio
+def minhas_campanhas(request):
+    """RF02 - as campanhas que a pessoa logada criou (das quais é a mestre):
+    primeiro as abertas e lotadas, depois as encerradas, das mais novas para
+    as mais antigas."""
+    usuario = usuario_atual(request)
+    campanhas = list(Campanha.objects(mestre_email=usuario.email).order_by("-criado_em"))
+    return render(
+        request,
+        "campanhas/minhas_campanhas.html",
+        {
+            "ativas": [c for c in campanhas if c.status != "encerrada"],
+            "encerradas": [c for c in campanhas if c.status == "encerrada"],
+            "total": len(campanhas),
         },
     )
 
@@ -162,7 +183,7 @@ def criar_campanha(request):
             campanha = Campanha(
                 titulo=dados["titulo"],
                 sinopse=dados["sinopse"],
-                sistema_rpg=dados["sistema_rpg"],
+                sistema_rpg=form.sistema_escolhido,
                 classificacao=dados["classificacao"],  # RD03
                 temas_sensiveis=list(dados["temas_sensiveis"]),
                 max_jogadores=dados["max_jogadores"],
@@ -184,6 +205,16 @@ def criar_campanha(request):
         "campanhas/form.html",
         {"form": form, "titulo_pagina": "Nova campanha"},
     )
+
+
+def _sistema_no_formulario(campanha):
+    """Valores iniciais dos campos de sistema ao editar: um sistema da lista
+    vem selecionado; qualquer outro nome vem como "Sistema Próprio", com o
+    nome no campo de texto (o antigo "Outro" vem com o campo vazio)."""
+    if campanha.sistema_rpg in SISTEMAS_DA_LISTA:
+        return {"sistema_rpg": campanha.sistema_rpg, "sistema_proprio": ""}
+    nome = "" if campanha.sistema_rpg in ("Outro", SISTEMA_PROPRIO) else campanha.sistema_rpg
+    return {"sistema_rpg": SISTEMA_PROPRIO, "sistema_proprio": nome}
 
 
 @login_obrigatorio
@@ -213,7 +244,7 @@ def editar_campanha(request, campanha_id):
             houve_mudanca_de_conteudo = (
                 campanha.titulo != dados["titulo"]
                 or campanha.sinopse != dados["sinopse"]
-                or campanha.sistema_rpg != dados["sistema_rpg"]
+                or campanha.sistema_rpg != form.sistema_escolhido
                 or campanha.max_jogadores != dados["max_jogadores"]
                 or campanha.classificacao != dados["classificacao"]
                 or sorted(campanha.temas_sensiveis or []) != sorted(temas)
@@ -223,7 +254,7 @@ def editar_campanha(request, campanha_id):
 
             campanha.titulo = dados["titulo"]
             campanha.sinopse = dados["sinopse"]
-            campanha.sistema_rpg = dados["sistema_rpg"]
+            campanha.sistema_rpg = form.sistema_escolhido
             campanha.classificacao = dados["classificacao"]
             campanha.temas_sensiveis = temas
             campanha.max_jogadores = dados["max_jogadores"]
@@ -271,7 +302,7 @@ def editar_campanha(request, campanha_id):
             initial={
                 "titulo": campanha.titulo,
                 "sinopse": campanha.sinopse,
-                "sistema_rpg": campanha.sistema_rpg,
+                **_sistema_no_formulario(campanha),
                 # Campanhas antigas não têm classificação: o campo vem vazio e
                 # o mestre precisa escolher uma ao salvar.
                 "classificacao": campanha.classificacao or "",
