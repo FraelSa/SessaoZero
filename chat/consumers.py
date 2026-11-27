@@ -58,6 +58,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not texto:
             return
 
+        # RF07/RF01 - desde que abriu o chat, a pessoa pode ter saído da mesa ou
+        # trocado de nome ou de e-mail. Confere de novo antes de aceitar a
+        # mensagem: quem saiu é desconectado, e a mensagem sai com os dados atuais.
+        usuario = await self._usuario_atualizado()
+        if usuario is None or not await self._usuario_participa(usuario):
+            await self.close()
+            return
+        self.usuario = usuario
+        self.zona = zona_segura(usuario.fuso_horario)
+
         if len(texto) > 1000:
             # O maxlength do <input> no template só protege contra
             # digitação manual — um cliente WebSocket "cru" poderia
@@ -119,6 +129,10 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not usuario_id:
             return None
         return Usuario.objects(id=usuario_id, ativo=True).first()
+
+    @database_sync_to_async
+    def _usuario_atualizado(self):
+        return Usuario.objects(id=self.usuario.id, ativo=True).first()
 
     @database_sync_to_async
     def _usuario_participa(self, usuario):
