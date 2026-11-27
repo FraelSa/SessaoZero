@@ -14,8 +14,9 @@ from core.horario import (
     para_utc_ingenuo,
     rotulo_fuso,
 )
-from moderacao.filtros import moderar_texto
+from moderacao.filtros import moderar_nome, moderar_sinopse, moderar_texto
 from moderacao.models import ConteudoBloqueado
+from moderacao.servicos import moderar_campos
 from notificacoes.servicos import notificar, notificar_varios
 
 from .avaliacoes import (
@@ -41,6 +42,14 @@ def _texto_da_data(data_utc):
     """'29/10/2026 21:00 (Salvador, Bahia)': o horário e o fuso em que o mestre
     o marcou, para aparecer certo nas notificações, que são texto fixo."""
     return f"{para_horario_local(data_utc):%d/%m/%Y %H:%M} ({_rotulo_fuso_atual()})"
+
+
+# RNF04 - o que o mestre escreve na campanha é público e passa pela moderação.
+CAMPOS_MODERADOS_DA_CAMPANHA = {
+    "titulo": ("campanha:titulo", moderar_nome),
+    "sinopse": ("campanha:sinopse", moderar_sinopse),
+    "sistema_proprio": ("campanha:sistema", moderar_nome),
+}
 
 
 def listar_campanhas(request):
@@ -178,7 +187,9 @@ def criar_campanha(request):
 
     if request.method == "POST":
         form = CampanhaForm(request.POST, rotulo_fuso=_rotulo_fuso_atual())
-        if form.is_valid():
+        if form.is_valid() and moderar_campos(
+            form, usuario.email, CAMPOS_MODERADOS_DA_CAMPANHA
+        ):
             dados = form.cleaned_data
             campanha = Campanha(
                 titulo=dados["titulo"],
@@ -233,7 +244,16 @@ def editar_campanha(request, campanha_id):
         form = CampanhaForm(
             request.POST, inscritos=inscritos, rotulo_fuso=_rotulo_fuso_atual()
         )
-        if form.is_valid():
+        # Só o que mudou é conferido: quem edita outra coisa não é barrado por
+        # um texto que já estava lá.
+        antigos = {
+            "titulo": campanha.titulo,
+            "sinopse": campanha.sinopse,
+            "sistema_proprio": campanha.sistema_rpg if campanha.tem_sistema_proprio else "",
+        }
+        if form.is_valid() and moderar_campos(
+            form, usuario.email, CAMPOS_MODERADOS_DA_CAMPANHA, antigos=antigos
+        ):
             dados = form.cleaned_data
             nova_data = para_utc_ingenuo(dados["data_sessao"])
             temas = list(dados["temas_sensiveis"])

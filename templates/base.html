@@ -71,6 +71,7 @@
                                 <li><a class="menu__link" href="{% url 'editar_perfil' %}">Meu perfil</a></li>
                                 <li><a class="menu__link" href="{% url 'editar_preferencias' %}">Preferências</a></li>
                                 <li><a class="menu__link" href="{% url 'minha_conta' %}">Minha conta</a></li>
+                                {% if eh_moderador %}<li><a class="menu__link" href="{% url 'painel_moderacao' %}">Moderação{% if bloqueios_pendentes %} ({{ bloqueios_pendentes }}){% endif %}</a></li>{% endif %}
                             </ul>
                             {% include "partials/_acessibilidade.html" %}
                             <div class="menu__rodape">

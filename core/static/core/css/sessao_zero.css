@@ -926,3 +926,32 @@ input[type="file"]::file-selector-button {
 .politica p, .politica ul { max-width: 65ch; }
 .politica ul { padding-left: 1.25rem; }
 .politica li { margin-bottom: 0.5rem; }
+
+/* ---------- Páginas de uma lista longa ---------- */
+
+.paginacao {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--espaco-2);
+  margin: var(--espaco-3) 0;
+}
+.paginacao__estado { color: var(--tinta-suave); }
+.paginacao__vazio { min-width: 6rem; }
+
+/* ---------- Painel de moderação (RNF04) ---------- */
+
+.moderacao__resumo { display: flex; flex-wrap: wrap; gap: 0.5rem 1.5rem; margin: 0 0 var(--espaco-3); padding: 0; list-style: none; color: var(--tinta-suave); }
+.moderacao__resumo strong { color: var(--tinta); }
+.moderacao__reincidentes { margin: 0 0 var(--espaco-3); padding: 0.75rem 1rem; border: 1.5px solid var(--laranja-forte); border-radius: var(--raio-ficha); }
+.moderacao__reincidentes h2 { margin: 0 0 0.25rem; font-size: 1rem; }
+.moderacao__reincidentes ul { margin: 0; padding-left: 1.25rem; }
+
+.bloqueio { margin-bottom: var(--espaco-2); padding: 0.75rem 1rem; border: 1.5px solid var(--linha); border-left: 4px solid var(--laranja); border-radius: var(--raio-ficha); background: var(--superficie); }
+.bloqueio--correto { border-left-color: var(--sucesso); }
+.bloqueio--falso_positivo { border-left-color: var(--perigo); }
+.bloqueio__cabeca { display: flex; flex-wrap: wrap; gap: 0.25rem 1rem; align-items: baseline; margin-bottom: 0.5rem; color: var(--tinta-suave); font-size: 0.875rem; }
+.bloqueio__texto { margin: 0 0 0.5rem; padding: 0.5rem 0.75rem; border-radius: var(--raio-controle); background: var(--papel); overflow-wrap: anywhere; white-space: pre-wrap; }
+.bloqueio__motivo { margin: 0 0 0.5rem; }
+.bloqueio__acoes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0; }
+.bloqueio__acoes form { margin: 0; }

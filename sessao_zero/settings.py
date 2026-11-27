@@ -107,6 +107,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.usuario_logado",
                 "notificacoes.context_processors.notificacoes_nao_lidas",
+                "moderacao.context_processors.moderacao_no_menu",
                 "core.context_processors.versao_css",
             ],
         },
@@ -261,3 +262,10 @@ CONTATO_PRIVACIDADE = config("CONTATO_PRIVACIDADE", default="")
 # Render não tem cron). Vazia, o endereço fica desligado. Gere um valor longo e
 # aleatório, por exemplo: python -c "import secrets; print(secrets.token_urlsafe(32))"
 LEMBRETES_TOKEN = config("LEMBRETES_TOKEN", default="")
+
+# RNF04 - e-mails (separados por vírgula) de quem pode revisar o conteúdo que a
+# moderação barrou, no painel /moderacao/. Vazio, ninguém tem acesso. O e-mail
+# precisa ser o da conta: se o moderador trocar de e-mail, atualize esta lista.
+MODERADORES_EMAILS = [
+    email.strip().lower() for email in config("MODERADORES_EMAILS", default="", cast=Csv()) if email.strip()
+]

@@ -22,8 +22,8 @@ from campanhas.avaliacoes import avaliacoes_recebidas, reputacao
 from campanhas.models import Campanha
 from core import politica
 from core.horario import FUSO_PADRAO, IDS_FUSOS
-from moderacao.filtros import moderar_texto
-from moderacao.models import ConteudoBloqueado
+from moderacao.filtros import moderar_nome, moderar_texto
+from moderacao.servicos import AUTOR_ANONIMO, moderar_campos
 
 from .avatares import AVATARES_PRONTOS, IDS_AVATARES_PRONTOS, svg_iniciais
 from .auth_utils import fazer_login, fazer_logout, login_obrigatorio, usuario_atual
@@ -127,7 +127,10 @@ def cadastro(request):
 
     if request.method == "POST":
         form = CadastroForm(request.POST)
-        if form.is_valid():
+        # RNF04 - o nome de usuário é público, então passa pela moderação.
+        if form.is_valid() and moderar_campos(
+            form, AUTOR_ANONIMO, {"username": ("cadastro:usuario", moderar_nome)}
+        ):
             pendente = CadastroPendente(
                 username=form.cleaned_data["username"],
                 email=form.cleaned_data["email"],
@@ -408,17 +411,12 @@ def _bio_aceita(form, usuario):
     """RNF04 - a biografia é pública, então passa pela mesma moderação dos
     comentários. Só é conferida quando o texto mudou. Devolve False (e põe o
     motivo no campo) se for barrada; a tentativa fica registrada."""
-    bio = form.cleaned_data["bio"]
-    if not bio or bio == (usuario.bio or ""):
-        return True
-    aceito, motivo = moderar_texto(bio)
-    if aceito:
-        return True
-    ConteudoBloqueado.objects.create(
-        autor_email=usuario.email, texto_original=bio, motivo=motivo, origem="perfil:bio"
+    return moderar_campos(
+        form,
+        usuario.email,
+        {"bio": ("perfil:bio", moderar_texto)},
+        antigos={"bio": usuario.bio or ""},
     )
-    form.add_error("bio", motivo)
-    return False
 
 
 @login_obrigatorio
@@ -625,7 +623,15 @@ def minha_conta(request):
         acao = request.POST.get("acao", "senha")
         if acao == "usuario":
             form_usuario = AlterarUsernameForm(request.POST, usuario=usuario, prefix="usuario")
-            if form_usuario.is_valid() and _salvar_novo_username(request, usuario, form_usuario):
+            if (
+                form_usuario.is_valid()
+                and moderar_campos(
+                    form_usuario,
+                    usuario.email,
+                    {"novo_username": ("perfil:usuario", moderar_nome)},
+                )
+                and _salvar_novo_username(request, usuario, form_usuario)
+            ):
                 return redirect("minha_conta")
         elif acao == "email":
             form_email = AlterarEmailForm(request.POST, usuario=usuario, prefix="email")

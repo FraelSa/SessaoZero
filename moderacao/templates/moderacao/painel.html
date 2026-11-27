@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load horario %}
+
+{% block titulo %}Moderação - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <div class="pagina-topo">
+        <h1>Moderação</h1>
+    </div>
+
+    <p>Textos que o filtro barrou antes de aparecerem no site. Marque cada um como bloqueio correto ou falso positivo: os falsos positivos mostram termos da lista (<code>moderacao/termos_proibidos.txt</code>) que precisam de ajuste. Os registros são apagados sozinhos depois de {{ retencao_dias }} dias.</p>
+
+    <ul class="moderacao__resumo">
+        <li><strong>{{ total_pendentes }}</strong> ainda não revisado{{ total_pendentes|pluralize:"s" }}</li>
+        <li><strong>{{ total_falsos_positivos }}</strong> falso{{ total_falsos_positivos|pluralize }} positivo{{ total_falsos_positivos|pluralize }}</li>
+        <li><strong>{{ total }}</strong> no total</li>
+    </ul>
+
+    {% if reincidentes %}
+        <section class="moderacao__reincidentes" aria-labelledby="titulo-reincidentes">
+            <h2 id="titulo-reincidentes">Barrados {{ reincidencia_min }} vezes ou mais nos últimos {{ reincidencia_dias }} dias</h2>
+            <ul>
+                {% for email, vezes in reincidentes %}<li>{{ email }}: {{ vezes }} vezes</li>{% endfor %}
+            </ul>
+        </section>
+    {% endif %}
+
+    <form class="filtro" method="get" action="{% url 'painel_moderacao' %}">
+        <div class="campo">
+            <label for="filtro-estado">Revisão</label>
+            <select id="filtro-estado" name="estado">
+                {% for valor, rotulo in estados %}<option value="{{ valor }}"{% if valor == estado %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="campo">
+            <label for="filtro-origem">Origem</label>
+            <select id="filtro-origem" name="origem">
+                {% for valor, rotulo in origens %}<option value="{{ valor }}"{% if valor == origem %} selected{% endif %}>{{ rotulo }}</option>{% endfor %}
+            </select>
+        </div>
+        <button class="botao botao--secundario" type="submit">Filtrar</button>
+    </form>
+
+    {% for bloqueio in bloqueios %}
+        <article class="bloqueio{% if bloqueio.decisao %} bloqueio--{{ bloqueio.decisao }}{% endif %}">
+            <header class="bloqueio__cabeca">
+                <span>{{ bloqueio.criado_em|local|date:"d/m/Y, H:i" }}</span>
+                <span>{{ bloqueio.rotulo_origem }}</span>
+                <span>{{ bloqueio.autor_email }}</span>
+                {% if bloqueio.revisado %}
+                    <span class="tag">{% if bloqueio.decisao == "falso_positivo" %}Falso positivo{% else %}Bloqueio correto{% endif %}, por {{ bloqueio.revisado_por }}</span>
+                {% endif %}
+            </header>
+            <p class="bloqueio__texto">{{ bloqueio.texto_original }}</p>
+            <p class="bloqueio__motivo">{{ bloqueio.motivo }}</p>
+            <div class="bloqueio__acoes">
+                {% if bloqueio.decisao != "correto" %}
+                    <form method="post" action="{% url 'revisar_bloqueio' bloqueio.id %}">
+                        {% csrf_token %}<input type="hidden" name="volta" value="{{ volta }}">
+                        <button class="botao botao--secundario" name="decisao" value="correto" type="submit">Bloqueio correto</button>
+                    </form>
+                {% endif %}
+                {% if bloqueio.decisao != "falso_positivo" %}
+                    <form method="post" action="{% url 'revisar_bloqueio' bloqueio.id %}">
+                        {% csrf_token %}<input type="hidden" name="volta" value="{{ volta }}">
+                        <button class="botao botao--perigo-contorno" name="decisao" value="falso_positivo" type="submit">Falso positivo</button>
+                    </form>
+                {% endif %}
+                {% if bloqueio.revisado %}
+                    <form method="post" action="{% url 'revisar_bloqueio' bloqueio.id %}">
+                        {% csrf_token %}<input type="hidden" name="volta" value="{{ volta }}">
+                        <button class="botao botao--secundario" name="decisao" value="pendente" type="submit">Desfazer revisão</button>
+                    </form>
+                {% endif %}
+            </div>
+        </article>
+    {% empty %}
+        <p class="vazio">Nenhum registro {% if estado == "pendentes" %}pendente de revisão{% else %}com esses filtros{% endif %}.</p>
+    {% endfor %}
+
+    {% include "partials/_paginacao.html" %}
+{% endblock %}
