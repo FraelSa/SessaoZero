@@ -1,20 +1,14 @@
 """RNF03 - dados e tráfego protegidos: diagnóstico fechado, avisos com prazo e HTTPS."""
 
-import json
-import os
-import subprocess
-import sys
-from pathlib import Path
+import re
 from unittest import mock
 
-from django.conf import settings
 from django.test import Client, SimpleTestCase, override_settings
 
 from notificacoes.models import RETENCAO_DIAS, Notificacao
 
+from .apoio_testes import ler_configuracao
 from .base_testes import MongoTestCase
-
-RAIZ = Path(settings.BASE_DIR)
 
 
 @override_settings(MODERADORES_EMAILS=["mod@exemplo.com"])
@@ -73,30 +67,13 @@ class RetencaoDosAvisosTests(MongoTestCase):
 
 
 def configuracao_com(**ambiente):
-    """Carrega o settings.py num processo à parte, com as variáveis dadas, e devolve
-    o que importa para a segurança. Processo à parte porque o settings.py abre a
-    conexão com o banco e decide coisas na hora em que é importado."""
-    codigo = (
-        "import json, sys\n"
-        "sys.path.insert(0, sys.argv[1])\n"
-        "import sessao_zero.settings as s\n"
+    """O que importa para a segurança no settings.py, lido como o servidor o lê."""
+    return ler_configuracao(
         "campos = ['DEBUG', 'SECURE_SSL_REDIRECT', 'SECURE_REDIRECT_EXEMPT', 'SECURE_HSTS_SECONDS',\n"
         "          'SESSION_COOKIE_SECURE', 'CSRF_COOKIE_SECURE', 'SECURE_PROXY_SSL_HEADER']\n"
-        "print(json.dumps({c: getattr(s, c, None) for c in campos}))\n"
+        "print(json.dumps({c: getattr(s, c, None) for c in campos}))\n",
+        **ambiente,
     )
-    env = {k: v for k, v in os.environ.items() if not k.startswith("DJANGO_")}
-    env.update(ambiente)
-    resultado = subprocess.run(
-        [sys.executable, "-c", codigo, str(RAIZ)],
-        capture_output=True,
-        text=True,
-        env=env,
-        cwd=RAIZ,
-        timeout=60,
-    )
-    if resultado.returncode != 0:
-        raise AssertionError(resultado.stderr)
-    return json.loads(resultado.stdout.strip().splitlines()[-1])
 
 
 class ConfiguracaoDeProducaoTests(SimpleTestCase):
@@ -110,9 +87,12 @@ class ConfiguracaoDeProducaoTests(SimpleTestCase):
         self.assertTrue(config["CSRF_COOKIE_SECURE"])
         self.assertEqual(config["SECURE_PROXY_SSL_HEADER"], ["HTTP_X_FORWARDED_PROTO", "https"])
 
-    def test_o_teste_de_saude_nao_e_redirecionado(self):
-        config = configuracao_com(**self.PRODUCAO)
-        self.assertEqual(config["SECURE_REDIRECT_EXEMPT"], [r"^saude/$"])
+    def test_os_testes_de_saude_nao_sao_redirecionados(self):
+        isentas = configuracao_com(**self.PRODUCAO)["SECURE_REDIRECT_EXEMPT"]
+        for caminho in ("saude/", "saude/banco/"):
+            self.assertTrue(any(re.match(padrao, caminho) for padrao in isentas), caminho)
+        for caminho in ("campanhas/", "contas/login/", ""):
+            self.assertFalse(any(re.match(padrao, caminho) for padrao in isentas), caminho)
 
     def test_o_prazo_do_hsts_e_o_redirecionamento_podem_ser_ajustados(self):
         config = configuracao_com(

@@ -1,23 +1,17 @@
 """RNF01 - carregamento rápido: fontes e estilos do próprio site, com cache longo, e
 tempos limite que impedem uma página de ficar pendurada esperando o banco."""
 
-import json
-import os
 import re
 import shutil
-import subprocess
-import sys
 import tempfile
-from pathlib import Path
 
-from django.conf import settings
 from django.contrib.staticfiles.storage import staticfiles_storage
 from django.core.management import call_command
 from django.test import Client, SimpleTestCase, override_settings
 
+from .apoio_testes import RAIZ, ler_configuracao
 from .base_testes import MongoTestCase
 
-RAIZ = Path(settings.BASE_DIR)
 PASTA_DAS_FONTES = RAIZ / "core" / "static" / "core" / "fonts"
 FONTES = (
     "public-sans-latin-400-normal.woff2",
@@ -128,32 +122,19 @@ class EstaticosSemBuildTests(SimpleTestCase):
 
 
 def configuracao_com(**ambiente):
-    """Carrega o settings.py num processo à parte e devolve o que importa para o
-    desempenho (ver `configuracao_com` em test_seguranca.py)."""
-    codigo = (
-        "import json, sys\n"
-        "sys.path.insert(0, sys.argv[1])\n"
-        "import sessao_zero.settings as s\n"
+    """O que importa para o desempenho no settings.py, lido como o servidor o lê."""
+    return ler_configuracao(
         "from mongoengine.connection import get_connection\n"
         "o = get_connection().options\n"
         "print(json.dumps({\n"
         "    'armazenamento': s.STORAGES['staticfiles']['BACKEND'],\n"
-        "    'opcoes': s.MONGO_OPCOES,\n"
         "    'selecao_s': o.server_selection_timeout,\n"
         "    'conexao_s': o.pool_options.connect_timeout,\n"
         "    'resposta_s': o.pool_options.socket_timeout,\n"
         "    'conexoes_max': o.pool_options.max_pool_size,\n"
-        "}))\n"
+        "}))\n",
+        **ambiente,
     )
-    env = {k: v for k, v in os.environ.items() if not k.startswith(("DJANGO_", "MONGO_"))}
-    env.update({"MONGO_URI": "mongodb://localhost:27017"}, **ambiente)
-    resultado = subprocess.run(
-        [sys.executable, "-c", codigo, str(RAIZ)],
-        capture_output=True, text=True, env=env, cwd=RAIZ, timeout=60,
-    )
-    if resultado.returncode != 0:
-        raise AssertionError(resultado.stderr)
-    return json.loads(resultado.stdout.strip().splitlines()[-1])
 
 
 class ConfiguracaoDeDesempenhoTests(SimpleTestCase):

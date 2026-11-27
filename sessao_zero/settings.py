@@ -60,9 +60,9 @@ if not DEBUG:
     # proxy que não envia X-Forwarded-Proto, o redirecionamento vira um laço sem
     # fim: nesse caso, DJANGO_SSL_REDIRECT=False.
     SECURE_SSL_REDIRECT = config("DJANGO_SSL_REDIRECT", default=True, cast=bool)
-    # O teste de saúde (Render, monitor de uptime) chega por HTTP, direto ao
-    # serviço, e precisa receber a resposta sem ser redirecionado.
-    SECURE_REDIRECT_EXEMPT = [r"^saude/$"]
+    # Os testes de saúde (Render, monitor de uptime) podem chegar por HTTP, direto
+    # ao serviço, e precisam receber a resposta sem ser redirecionados.
+    SECURE_REDIRECT_EXEMPT = [r"^saude/"]
     SECURE_HSTS_SECONDS = config("DJANGO_HSTS_SEGUNDOS", default=3600, cast=int)
 
 # --------------------------------------------------------------------------
@@ -133,18 +133,26 @@ ASGI_APPLICATION = "sessao_zero.asgi.application"
 # --------------------------------------------------------------------------
 # Django Channels (chat em tempo real, WebSockets)
 # --------------------------------------------------------------------------
-# InMemoryChannelLayer é suficiente para desenvolvimento (1 processo só).
-# Em produção, com mais de um processo/worker rodando, troque por Redis:
+# Sem REDIS_URL, as mensagens do chat passam pela memória do próprio processo
+# (InMemoryChannelLayer): basta para desenvolvimento e para um servidor só, mas,
+# com dois ou mais processos ou instâncias, quem está num processo não receberia
+# as mensagens de quem está em outro.
 #
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {"hosts": [config("REDIS_URL", default="redis://localhost:6379")]},
-#     }
-# }
-CHANNEL_LAYERS = {
-    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
-}
+# RNF05 - para crescer além de um processo, defina REDIS_URL (ex.: o endereço do
+# "Key Value" do Render, redis://...). As mensagens passam a circular pelo Redis e
+# qualquer número de processos conversa entre si. Nada mais muda no código.
+REDIS_URL = config("REDIS_URL", default="")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            # Mensagens não entregues em 10 s são descartadas, e cada canal guarda
+            # no máximo 200: um cliente lento ou parado não enche a memória do Redis.
+            "CONFIG": {"hosts": [REDIS_URL], "expiry": 10, "capacity": 200},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # --------------------------------------------------------------------------
 # Banco de dados relacional (apenas para apps internos do Django)

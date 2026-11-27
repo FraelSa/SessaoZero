@@ -10,3 +10,6 @@ urlpatterns = [
     path("chat/", include("chat.urls")),
     path("moderacao/", include("moderacao.urls")),
 ]
+
+# RNF06 - páginas de erro que não dependem do banco (ver core/views.py).
+handler500 = "core.views.erro_500"
