@@ -169,7 +169,19 @@ SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 MONGO_DB_NAME = config("MONGO_DB_NAME", default="sessao_zero")
 MONGO_URI = config("MONGO_URI", default="mongodb://localhost:27017")
 
-connect(db=MONGO_DB_NAME, host=MONGO_URI, alias="default")
+# RNF01 / RNF06 - tempos limite. Sem eles, o PyMongo espera 30 segundos por um
+# servidor que não responde, e cada pessoa que abre o site nesse intervalo fica com
+# a página pendurada. Com eles, a requisição falha rápido (e o teste de saúde,
+# /saude/, avisa que o banco está fora do ar). O pool limita as conexões abertas
+# com o Atlas, cujo plano gratuito aceita 500 no total.
+MONGO_OPCOES = {
+    "serverSelectionTimeoutMS": config("MONGO_TEMPO_SELECAO_MS", default=5000, cast=int),
+    "connectTimeoutMS": config("MONGO_TEMPO_CONEXAO_MS", default=5000, cast=int),
+    "socketTimeoutMS": config("MONGO_TEMPO_RESPOSTA_MS", default=20000, cast=int),
+    "maxPoolSize": config("MONGO_CONEXOES_MAX", default=50, cast=int),
+}
+
+connect(db=MONGO_DB_NAME, host=MONGO_URI, alias="default", **MONGO_OPCOES)
 
 # --------------------------------------------------------------------------
 # Validação de senha (usada pelos helpers de hash em accounts/models.py)
@@ -197,7 +209,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+    # RNF01 - nomes com resumo e cache de 1 ano (ver core/armazenamento.py).
+    "staticfiles": {"BACKEND": "core.armazenamento.ArmazenamentoDeEstaticos"},
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

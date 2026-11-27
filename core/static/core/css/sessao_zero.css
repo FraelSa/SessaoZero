@@ -5,6 +5,38 @@
    (cheia = ocupada, vazia = livre).
    ========================================================================== */
 
+/* Fontes hospedadas aqui mesmo (ver core/static/core/fonts/LEIA-ME.txt): nada é
+   pedido ao Google, e `font-display: swap` mostra o texto de imediato com a fonte
+   do sistema até a nossa chegar. */
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/public-sans-latin-400-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../fonts/public-sans-latin-600-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("../fonts/public-sans-latin-700-normal.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Young Serif";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../fonts/young-serif-latin-400-normal.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light;
 
