@@ -1,9 +1,11 @@
 from django.conf import settings
-from django.http import JsonResponse
+from django.http import Http404, JsonResponse
 from django.shortcuts import render
 from mongoengine.connection import get_db
 
+from accounts.auth_utils import usuario_atual
 from campanhas.models import Campanha
+from moderacao.permissoes import eh_moderador
 
 from . import politica
 
@@ -36,7 +38,13 @@ def status_mongo(request):
 
     Útil durante o desenvolvimento para verificar rapidamente a variável
     MONGO_URI do .env sem precisar abrir o Mongo Compass ou o shell.
+
+    RNF03 - o nome do banco, as coleções e as mensagens de erro (que podem trazer o
+    endereço do servidor) não são para qualquer visitante: fora do modo de
+    desenvolvimento, só moderadores enxergam esta página; os demais recebem 404.
     """
+    if not (settings.DEBUG or eh_moderador(usuario_atual(request))):
+        raise Http404("Página não encontrada.")
     try:
         db = get_db()
         colecoes = db.list_collection_names()
@@ -48,4 +56,6 @@ def status_mongo(request):
             }
         )
     except Exception as erro:  # noqa: BLE001 - queremos mostrar qualquer falha de conexão
-        return JsonResponse({"conectado": False, "erro": str(erro)}, status=500)
+        # O texto completo do erro só aparece em desenvolvimento.
+        detalhe = str(erro) if settings.DEBUG else type(erro).__name__
+        return JsonResponse({"conectado": False, "erro": detalhe}, status=500)

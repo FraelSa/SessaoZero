@@ -7,12 +7,15 @@ requirements-dev.txt). Assim dá para rodar os testes com o .env apontando para
 o Atlas sem tocar em nenhum dado.
 """
 
+import re
+
 import mongomock
 from django.conf import settings
+from django.core import mail
 from django.test import TestCase
 from mongoengine import connect, disconnect
 
-from accounts.models import CadastroPendente, FotoPerfil, Usuario
+from accounts.models import CadastroPendente, FotoPerfil, TentativaLogin, Usuario
 from campanhas.models import Avaliacao, Campanha
 from chat.models import MensagemChat
 from moderacao.models import ConteudoBloqueado
@@ -22,6 +25,7 @@ DOCUMENTOS = (
     Usuario,
     FotoPerfil,
     CadastroPendente,
+    TentativaLogin,
     Campanha,
     Avaliacao,
     MensagemChat,
@@ -64,6 +68,7 @@ class MongoTestCase(TestCase):
     def entrar(self, usuario):
         sessao = self.client.session
         sessao["usuario_id"] = str(usuario.id)
+        sessao["sessao_versao"] = usuario.sessao_versao or 0
         sessao.save()
         # A sessão fica num cookie assinado (SESSION_ENGINE em settings.py):
         # depois de salvar, o conteúdo novo só chega ao site pelo cookie.
@@ -86,3 +91,10 @@ class MongoTestCase(TestCase):
 
     def textos_das_notificacoes(self, usuario):
         return [n.texto for n in Notificacao.objects(destinatario_email=usuario.email)]
+
+    def token_do_email(self, rota, indice=-1):
+        """Código secreto do link `/contas/<rota>/<token>/` num dos e-mails
+        enviados (por padrão, o último). O banco só guarda o resumo do código,
+        então é do e-mail que o teste precisa tirá-lo."""
+        corpo = mail.outbox[indice].body
+        return re.search(rf"/contas/{re.escape(rota)}/([^/\s]+)/", corpo).group(1)

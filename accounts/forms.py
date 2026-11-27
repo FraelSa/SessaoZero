@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from campanhas.models import SISTEMAS_DA_LISTA
 from core.horario import FUSOS_HORARIOS
 
+from . import limite_login
 from .avatares import AVATARES_PRONTOS
 from .imagens import processar_foto
 from .models import Usuario
@@ -244,6 +245,18 @@ class PerfilForm(forms.Form):
         return dados
 
 
+def conferir_senha_atual(usuario, senha, mensagem):
+    """RNF02 - confere a senha de quem já está logado respeitando o limite de
+    tentativas (um cookie roubado não serviria para adivinhar a senha)."""
+    try:
+        confere = limite_login.conferir_senha(usuario, senha)
+    except limite_login.TentativasEsgotadas as erro:
+        raise ValidationError(str(erro))
+    if not confere:
+        raise ValidationError(mensagem)
+    return senha
+
+
 class AlterarSenhaForm(forms.Form):
     # RF01 - editar a conta: trocar a senha estando logado
     senha_atual = forms.CharField(
@@ -258,10 +271,9 @@ class AlterarSenhaForm(forms.Form):
         self.usuario = usuario
 
     def clean_senha_atual(self):
-        senha = self.cleaned_data["senha_atual"]
-        if not self.usuario.checar_senha(senha):
-            raise ValidationError("A senha atual não confere.")
-        return senha
+        return conferir_senha_atual(
+            self.usuario, self.cleaned_data["senha_atual"], "A senha atual não confere."
+        )
 
     def clean_nova_senha(self):
         senha = self.cleaned_data["nova_senha"]
@@ -319,10 +331,9 @@ class AlterarEmailForm(forms.Form):
         return novo
 
     def clean_senha_atual(self):
-        senha = self.cleaned_data["senha_atual"]
-        if not self.usuario.checar_senha(senha):
-            raise ValidationError("A senha atual não confere.")
-        return senha
+        return conferir_senha_atual(
+            self.usuario, self.cleaned_data["senha_atual"], "A senha atual não confere."
+        )
 
 
 class ExcluirContaForm(forms.Form):
@@ -337,7 +348,4 @@ class ExcluirContaForm(forms.Form):
         self.usuario = usuario
 
     def clean_senha(self):
-        senha = self.cleaned_data["senha"]
-        if not self.usuario.checar_senha(senha):
-            raise ValidationError("Senha incorreta.")
-        return senha
+        return conferir_senha_atual(self.usuario, self.cleaned_data["senha"], "Senha incorreta.")

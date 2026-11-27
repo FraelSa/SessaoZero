@@ -52,6 +52,19 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+    # RNF03 - tráfego sempre protegido. Quem chega por HTTP é levado para HTTPS e,
+    # depois do primeiro acesso seguro, o navegador passa a recusar HTTP para este
+    # site (HSTS). O prazo do HSTS começa em 1 hora de propósito: um erro de
+    # configuração se desfaz depressa. Com o site conferido, aumente em
+    # DJANGO_HSTS_SEGUNDOS (31536000 = 1 ano). Se o servidor ficar atrás de um
+    # proxy que não envia X-Forwarded-Proto, o redirecionamento vira um laço sem
+    # fim: nesse caso, DJANGO_SSL_REDIRECT=False.
+    SECURE_SSL_REDIRECT = config("DJANGO_SSL_REDIRECT", default=True, cast=bool)
+    # O teste de saúde (Render, monitor de uptime) chega por HTTP, direto ao
+    # serviço, e precisa receber a resposta sem ser redirecionado.
+    SECURE_REDIRECT_EXEMPT = [r"^saude/$"]
+    SECURE_HSTS_SECONDS = config("DJANGO_HSTS_SEGUNDOS", default=3600, cast=int)
+
 # --------------------------------------------------------------------------
 # Apps instalados
 # --------------------------------------------------------------------------

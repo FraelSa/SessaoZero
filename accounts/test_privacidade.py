@@ -81,7 +81,7 @@ class AceiteNoCadastroTests(MongoTestCase):
         cliente.post("/contas/cadastro/", self.dados())
         pendente = CadastroPendente.objects.get()
         aceite = pendente.politica_aceita_em
-        cliente.get(f"/contas/confirmar-email/{pendente.token}/")
+        cliente.get(f"/contas/confirmar-email/{self.token_do_email('confirmar-email')}/")
         usuario = Usuario.objects.get(email="novata@exemplo.com")
         self.assertEqual(usuario.politica_aceita_em, aceite)
         self.assertEqual(usuario.politica_versao, politica.VERSAO)

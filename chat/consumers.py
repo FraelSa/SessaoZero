@@ -8,12 +8,15 @@ dentro do consumer (que é assíncrono) passa por
 thread separada sem travar o loop de eventos.
 """
 
+import collections
 import datetime
 import json
+import time
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
+from accounts.auth_utils import sessao_vale
 from accounts.models import Usuario
 from campanhas.utils import buscar_campanha_ou_404
 from core.horario import UTC, zona_segura
@@ -21,6 +24,12 @@ from moderacao.filtros import moderar_texto
 from moderacao.models import ConteudoBloqueado
 
 from .models import MensagemChat
+
+# RNF04 / RNF05 - ritmo máximo de mensagens de uma conexão: passando disso, as
+# mensagens são recusadas até a janela abrir de novo. Barra enxurrada de spam e
+# poupa o servidor (cada mensagem faz consultas, grava e é distribuída ao grupo).
+MAX_MENSAGENS_NA_JANELA = 5
+JANELA_DE_ENVIO_SEGUNDOS = 10
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
@@ -38,6 +47,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
             return
 
         self.usuario = usuario
+        # RNF02 - a conexão vale enquanto a sessão não for encerrada (troca de senha).
+        self.sessao_versao = usuario.sessao_versao or 0
+        self.envios = collections.deque()
         # RD04 - a hora de cada mensagem é mostrada no fuso de quem a recebe.
         self.zona = zona_segura(usuario.fuso_horario)
 
@@ -58,11 +70,28 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if not texto:
             return
 
+        if self._enviando_rapido_demais():
+            await self.send(
+                text_data=json.dumps(
+                    {
+                        "tipo": "erro",
+                        "motivo": "Você está enviando mensagens rápido demais. "
+                        "Espere alguns segundos.",
+                    }
+                )
+            )
+            return
+
         # RF07/RF01 - desde que abriu o chat, a pessoa pode ter saído da mesa ou
         # trocado de nome ou de e-mail. Confere de novo antes de aceitar a
         # mensagem: quem saiu é desconectado, e a mensagem sai com os dados atuais.
+        # RNF02 - o mesmo vale para quem trocou a senha (a sessão foi encerrada).
         usuario = await self._usuario_atualizado()
-        if usuario is None or not await self._usuario_participa(usuario):
+        if (
+            usuario is None
+            or (usuario.sessao_versao or 0) != self.sessao_versao
+            or not await self._usuario_participa(usuario)
+        ):
             await self.close()
             return
         self.usuario = usuario
@@ -102,6 +131,16 @@ class ChatConsumer(AsyncWebsocketConsumer):
             },
         )
 
+    def _enviando_rapido_demais(self):
+        """Conta esta tentativa no ritmo da conexão; True se já passou do limite."""
+        agora = time.monotonic()
+        while self.envios and agora - self.envios[0] > JANELA_DE_ENVIO_SEGUNDOS:
+            self.envios.popleft()
+        if len(self.envios) >= MAX_MENSAGENS_NA_JANELA:
+            return True
+        self.envios.append(agora)
+        return False
+
     async def mensagem_chat(self, evento):
         """Handler chamado quando alguém do grupo manda uma mensagem —
         repassa para o WebSocket deste usuário específico."""
@@ -125,10 +164,14 @@ class ChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _usuario_da_sessao(self):
-        usuario_id = self.scope.get("session", {}).get("usuario_id")
+        sessao = self.scope.get("session", {})
+        usuario_id = sessao.get("usuario_id")
         if not usuario_id:
             return None
-        return Usuario.objects(id=usuario_id, ativo=True).first()
+        usuario = Usuario.objects(id=usuario_id, ativo=True).first()
+        if usuario is None or not sessao_vale(sessao, usuario):
+            return None
+        return usuario
 
     @database_sync_to_async
     def _usuario_atualizado(self):

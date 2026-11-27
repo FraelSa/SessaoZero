@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.mail import send_mail
 
 from accounts.models import Usuario
+from core.privacidade import mascarar_email
 
 from .models import Notificacao
 
@@ -35,7 +36,9 @@ def _enviar_email(destinatario_email, texto, url):
     except Exception:  # noqa: BLE001
         # Falha de e-mail (SMTP fora do ar, senha errada...) nunca deve
         # impedir a ação que gerou a notificação; fica só no log.
-        logger.exception("Falha ao enviar e-mail de notificação para %s", destinatario_email)
+        logger.exception(
+            "Falha ao enviar e-mail de notificação para %s", mascarar_email(destinatario_email)
+        )
 
 
 def notificar(destinatario_email, texto, url="", em_segundo_plano=True):

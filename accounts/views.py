@@ -2,7 +2,6 @@ import datetime
 import json
 import logging
 import math
-import secrets
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
@@ -22,6 +21,7 @@ from campanhas.avaliacoes import avaliacoes_recebidas, reputacao
 from campanhas.models import Campanha
 from core import politica
 from core.horario import FUSO_PADRAO, IDS_FUSOS
+from core.privacidade import mascarar_email
 from moderacao.filtros import moderar_nome, moderar_texto
 from moderacao.servicos import AUTOR_ANONIMO, moderar_campos
 
@@ -46,8 +46,10 @@ from .forms import (
     ReenviarConfirmacaoForm,
     SolicitarRecuperacaoForm,
 )
+from . import limite_login
 from .identidade import trocar_email, trocar_username
 from .models import CadastroPendente, FotoPerfil, Usuario
+from .tokens import gerar_token, resumo_do_token
 
 DURACAO_TOKEN_RECUPERACAO = datetime.timedelta(hours=1)
 DURACAO_TOKEN_CONFIRMACAO = datetime.timedelta(hours=24)
@@ -84,10 +86,11 @@ def _email_vai_para_o_terminal():
     return settings.EMAIL_BACKEND.endswith("console.EmailBackend")
 
 
-def _enviar_email_confirmacao(request, pendente):
-    """Manda o link de confirmação. Levanta exceção se o envio falhar (quem
-    chama decide o que mostrar na tela)."""
-    link = settings.SITE_URL.rstrip("/") + reverse("confirmar_email", args=[pendente.token])
+def _enviar_email_confirmacao(request, pendente, token):
+    """Manda o link de confirmação. O `token` é o código que vai no link; o banco
+    guarda só o resumo dele (ver tokens.py). Levanta exceção se o envio falhar
+    (quem chama decide o que mostrar na tela)."""
+    link = settings.SITE_URL.rstrip("/") + reverse("confirmar_email", args=[token])
     send_mail(
         subject="Sessão Zero - Confirme o seu e-mail",
         message=(
@@ -107,9 +110,9 @@ def _renovar_e_enviar(request, pendente):
     é gravado depois que o e-mail saiu, então uma falha de envio não
     invalida o link anterior."""
     agora = datetime.datetime.utcnow()
-    pendente.token = secrets.token_urlsafe(32)
+    token, pendente.token = gerar_token()
     pendente.expira_em = agora + DURACAO_TOKEN_CONFIRMACAO
-    _enviar_email_confirmacao(request, pendente)
+    _enviar_email_confirmacao(request, pendente, token)
     pendente.ultimo_envio_em = agora
     pendente.save()
 
@@ -131,18 +134,21 @@ def cadastro(request):
         if form.is_valid() and moderar_campos(
             form, AUTOR_ANONIMO, {"username": ("cadastro:usuario", moderar_nome)}
         ):
+            token, resumo = gerar_token()
             pendente = CadastroPendente(
                 username=form.cleaned_data["username"],
                 email=form.cleaned_data["email"],
                 senha_hash=make_password(form.cleaned_data["senha"]),
-                token=secrets.token_urlsafe(32),
+                token=resumo,
                 expira_em=datetime.datetime.utcnow() + DURACAO_TOKEN_CONFIRMACAO,
                 politica_aceita_em=datetime.datetime.utcnow(),  # RNF03
             )
             try:
-                _enviar_email_confirmacao(request, pendente)
+                _enviar_email_confirmacao(request, pendente, token)
             except Exception:  # noqa: BLE001 - qualquer falha de SMTP
-                logger.exception("Falha ao enviar e-mail de confirmação para %s", pendente.email)
+                logger.exception(
+                    "Falha ao enviar e-mail de confirmação para %s", mascarar_email(pendente.email)
+                )
                 form.add_error(
                     None,
                     "Não conseguimos enviar o e-mail de confirmação agora. "
@@ -175,7 +181,9 @@ def verifique_email(request):
             try:
                 _renovar_e_enviar(request, pendente)
             except Exception:  # noqa: BLE001
-                logger.exception("Falha ao reenviar e-mail de confirmação para %s", pendente.email)
+                logger.exception(
+                    "Falha ao reenviar e-mail de confirmação para %s", mascarar_email(pendente.email)
+                )
                 messages.error(request, "Não foi possível enviar o e-mail agora. Tente de novo em instantes.")
             else:
                 messages.success(request, f"Enviamos um novo link para {pendente.email}.")
@@ -198,6 +206,12 @@ def login_view(request):
         if form.is_valid():
             email = form.cleaned_data["email"].strip().lower()
             senha = form.cleaned_data["senha"]
+            try:
+                # RNF02 - depois de várias senhas erradas, nem confere mais a senha.
+                limite_login.verificar(email)
+            except limite_login.TentativasEsgotadas as erro:
+                form.add_error(None, str(erro))
+                return render(request, "accounts/login.html", {"form": form})
             usuario = Usuario.objects(email=email, ativo=True).first()
 
             # Mensagem de erro genérica de propósito: não dizemos se foi o
@@ -207,13 +221,15 @@ def login_view(request):
                 pendente = CadastroPendente.objects(email=email).first()
                 if pendente is not None and check_password(senha, pendente.senha_hash):
                     # Quem acertou a senha de um cadastro ainda não confirmado
-                    # precisa saber o que falta, em vez de ver "inválido".
+                    # precisa saber o que falta, em vez de ver "inválido". Senha
+                    # certa não conta como tentativa errada.
                     form.add_error(
                         None,
                         "Falta confirmar o seu e-mail. Abra o link que enviamos no "
                         "cadastro, ou peça um novo abaixo.",
                     )
                 else:
+                    limite_login.registrar_falha(email)
                     form.add_error(None, "E-mail ou senha inválidos.")
             elif usuario.aguardando_confirmacao:
                 # Conta criada pela versão antiga, que gravava o usuário antes
@@ -224,6 +240,7 @@ def login_view(request):
                     "enviamos no cadastro, ou peça um novo abaixo.",
                 )
             else:
+                limite_login.limpar(email)
                 fazer_login(request, usuario)
                 messages.success(request, f"Login realizado. Bem-vindo(a) de volta, {usuario.username}!")
                 return redirect("home")
@@ -243,7 +260,9 @@ def confirmar_email(request, token):
     """Passo final do cadastro: o usuário clica no link recebido por e-mail e
     só então a conta é criada no banco."""
     agora = datetime.datetime.utcnow()
-    pendente = CadastroPendente.objects(token=token, expira_em__gt=agora).first()
+    pendente = CadastroPendente.objects(
+        token=resumo_do_token(token), expira_em__gt=agora
+    ).first()
 
     if pendente is None:
         # Contas criadas pela versão antiga já estavam em "usuarios", só
@@ -324,7 +343,7 @@ def reenviar_confirmacao(request):
                         username=legado.username,
                         email=legado.email,
                         senha_hash=legado.senha_hash,
-                        token=secrets.token_urlsafe(32),
+                        token=gerar_token()[1],  # trocado já em seguida, ao enviar o link
                         expira_em=datetime.datetime.utcnow(),
                         ultimo_envio_em=datetime.datetime(1970, 1, 1),
                     )
@@ -333,7 +352,9 @@ def reenviar_confirmacao(request):
                 try:
                     _renovar_e_enviar(request, pendente)
                 except Exception:  # noqa: BLE001
-                    logger.exception("Falha ao reenviar e-mail de confirmação para %s", email)
+                    logger.exception(
+                        "Falha ao reenviar e-mail de confirmação para %s", mascarar_email(email)
+                    )
                     messages.error(request, "Não foi possível enviar o e-mail agora. Tente de novo em instantes.")
                     return redirect("reenviar_confirmacao")
                 if legado is not None:
@@ -581,11 +602,13 @@ def _pedir_troca_de_email(request, usuario, form):
             form.add_error(None, f"Aguarde {espera} segundos para pedir outra troca de e-mail.")
             return False
 
-    token = secrets.token_urlsafe(32)
+    token, resumo = gerar_token()
     try:
         _enviar_email_troca(usuario, novo, token)
     except Exception:  # noqa: BLE001 - qualquer falha de SMTP
-        logger.exception("Falha ao enviar e-mail de troca de endereço para %s", novo)
+        logger.exception(
+            "Falha ao enviar e-mail de troca de endereço para %s", mascarar_email(novo)
+        )
         form.add_error(
             None,
             "Não conseguimos enviar o e-mail de confirmação agora. "
@@ -595,7 +618,7 @@ def _pedir_troca_de_email(request, usuario, form):
 
     # O pedido só é gravado depois que o e-mail saiu.
     usuario.novo_email = novo
-    usuario.token_novo_email = token
+    usuario.token_novo_email = resumo
     usuario.token_novo_email_expira_em = agora + DURACAO_TOKEN_CONFIRMACAO
     usuario.save()
     messages.success(
@@ -644,8 +667,12 @@ def minha_conta(request):
                 # Qualquer link de recuperação pendente deixa de valer.
                 usuario.token_recuperacao_senha = None
                 usuario.token_recuperacao_expira_em = None
+                # RNF02 - quem estava logado em outro lugar (ou com um cookie
+                # roubado) sai; esta sessão continua, com o número novo.
+                usuario.encerrar_sessoes()
                 usuario.save()
-                messages.success(request, "Senha alterada.")
+                fazer_login(request, usuario)
+                messages.success(request, "Senha alterada. As outras sessões abertas foram encerradas.")
                 return redirect("minha_conta")
 
     return render(
@@ -666,7 +693,8 @@ def confirmar_novo_email(request, token):
     endereço novo e só então ele passa a ser o e-mail da conta, com tudo que
     estava ligado ao antigo (campanhas, inscrições, avisos...) acompanhando."""
     usuario = Usuario.objects(
-        token_novo_email=token, token_novo_email_expira_em__gt=datetime.datetime.utcnow()
+        token_novo_email=resumo_do_token(token),
+        token_novo_email_expira_em__gt=datetime.datetime.utcnow(),
     ).first()
     if usuario is None or not usuario.novo_email:
         messages.error(
@@ -739,6 +767,17 @@ def excluir_conta(request):
     )
 
 
+def _recuperacao_pedida_ha_pouco(usuario):
+    """True se um link de recuperação foi enviado há menos de INTERVALO_REENVIO.
+    Evita que alguém dispare e-mails em série para a conta de outra pessoa (e
+    gaste a cota do serviço de e-mail). O momento do pedido sai da validade do link."""
+    expira_em = usuario.token_recuperacao_expira_em
+    if expira_em is None:
+        return False
+    pedido_em = expira_em - DURACAO_TOKEN_RECUPERACAO
+    return datetime.datetime.utcnow() < pedido_em + INTERVALO_REENVIO
+
+
 def solicitar_recuperacao_senha(request):
     """RF04 - passo 1: usuário informa o e-mail e recebe um link de redefinição."""
     if request.method == "POST":
@@ -747,27 +786,34 @@ def solicitar_recuperacao_senha(request):
             email = form.cleaned_data["email"].strip().lower()
             usuario = Usuario.objects(email=email, ativo=True).first()
 
-            if usuario:
-                usuario.token_recuperacao_senha = secrets.token_urlsafe(32)
-                usuario.token_recuperacao_expira_em = (
-                    datetime.datetime.utcnow() + DURACAO_TOKEN_RECUPERACAO
-                )
-                usuario.save()
-
-                link = settings.SITE_URL.rstrip("/") + reverse(
-                    "redefinir_senha", args=[usuario.token_recuperacao_senha]
-                )
-                send_mail(
-                    subject="Sessão Zero - Redefinição de senha",
-                    message=(
-                        f"Olá, {usuario.username}!\n\n"
-                        f"Use o link abaixo para escolher uma nova senha "
-                        f"(válido por 1 hora):\n{link}\n\n"
-                        "Se você não pediu isso, pode ignorar este e-mail."
-                    ),
-                    from_email=settings.DEFAULT_FROM_EMAIL,
-                    recipient_list=[usuario.email],
-                )
+            if usuario and not _recuperacao_pedida_ha_pouco(usuario):
+                token, resumo = gerar_token()
+                link = settings.SITE_URL.rstrip("/") + reverse("redefinir_senha", args=[token])
+                try:
+                    send_mail(
+                        subject="Sessão Zero - Redefinição de senha",
+                        message=(
+                            f"Olá, {usuario.username}!\n\n"
+                            f"Use o link abaixo para escolher uma nova senha "
+                            f"(válido por 1 hora):\n{link}\n\n"
+                            "Se você não pediu isso, pode ignorar este e-mail."
+                        ),
+                        from_email=settings.DEFAULT_FROM_EMAIL,
+                        recipient_list=[usuario.email],
+                    )
+                except Exception:  # noqa: BLE001 - qualquer falha de SMTP
+                    # A resposta é a mesma de sempre: não revelamos se a conta existe.
+                    logger.exception(
+                        "Falha ao enviar e-mail de redefinição de senha para %s",
+                        mascarar_email(usuario.email),
+                    )
+                else:
+                    # O link só é gravado depois que o e-mail saiu.
+                    usuario.token_recuperacao_senha = resumo
+                    usuario.token_recuperacao_expira_em = (
+                        datetime.datetime.utcnow() + DURACAO_TOKEN_RECUPERACAO
+                    )
+                    usuario.save()
 
             # Mensagem igual exista ou não a conta, para não revelar quais
             # e-mails estão cadastrados no sistema.
@@ -785,7 +831,7 @@ def solicitar_recuperacao_senha(request):
 
 def redefinir_senha(request, token):
     """RF04 - passo 2: usuário define a nova senha a partir do link recebido."""
-    usuario = Usuario.objects(token_recuperacao_senha=token).first()
+    usuario = Usuario.objects(token_recuperacao_senha=resumo_do_token(token)).first()
     token_valido = (
         usuario is not None
         and usuario.token_recuperacao_expira_em is not None
@@ -802,7 +848,10 @@ def redefinir_senha(request, token):
             usuario.set_senha(form.cleaned_data["nova_senha"])
             usuario.token_recuperacao_senha = None
             usuario.token_recuperacao_expira_em = None
+            # RNF02 - se a conta foi invadida, quem está dentro sai agora.
+            usuario.encerrar_sessoes()
             usuario.save()
+            limite_login.limpar(usuario.email)
             messages.success(request, "Senha redefinida! Já pode fazer login.")
             return redirect("login")
     else:
