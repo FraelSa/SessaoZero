@@ -133,6 +133,40 @@ publica a nova versão sozinho.
 Depois disso, os arquivos que estiverem na `public_html` da Hostinger deixam de
 ser usados pelo domínio.
 
+## 6. Lembretes de sessão (agendador)
+
+O site avisa o mestre e os jogadores inscritos 24 horas antes de cada sessão
+(sininho e e-mail). O plano grátis do Render não tem agendador, então alguém
+precisa chamar o site de hora em hora. Sem isso, o resto do site funciona
+normalmente; só os lembretes não saem. Escolha **uma** das opções:
+
+**Opção A: GitHub Actions (o workflow já está no repositório).**
+
+1. No Render, abra o serviço → **Environment** e copie o valor de
+   `LEMBRETES_TOKEN`. O `render.yaml` gera esse valor sozinho; se o serviço foi
+   criado antes disso, crie a variável você mesmo com um texto longo e
+   aleatório (por exemplo, o resultado de
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+2. No GitHub, abra o repositório → **Settings → Secrets and variables →
+   Actions → New repository secret** e crie dois segredos: `SITE_URL`
+   (`https://seusite.com.br`) e `LEMBRETES_TOKEN` (o mesmo valor do Render).
+3. Na aba **Actions**, abra **Lembretes de sessão → Run workflow** para testar.
+   O passo deve terminar em verde e mostrar algo como
+   `{"campanhas": 0, "avisos": 0}`. Depois disso ele roda sozinho, de hora em
+   hora (o GitHub pode atrasar alguns minutos).
+4. Em repositório **público**, o GitHub desativa workflows agendados depois de
+   60 dias sem atividade no repositório. Se isso acontecer, ele avisa por
+   e-mail e basta reativar o workflow na aba **Actions**.
+
+**Opção B: um serviço de cron gratuito** (por exemplo, cron-job.org). Crie uma
+tarefa de hora em hora que envie um `POST` para
+`https://seusite.com.br/notificacoes/lembretes/` com o cabeçalho
+`Authorization: Bearer <valor de LEMBRETES_TOKEN>`.
+
+Chamar mais de uma vez por hora é inofensivo: cada sessão é lembrada uma vez
+só. Para testar sem avisar ninguém, rode no computador
+`python manage.py enviar_lembretes_sessao --simular`.
+
 ## Problemas comuns
 
 | Sintoma | Causa provável |
@@ -143,6 +177,7 @@ ser usados pelo domínio.
 | Páginas demoram ~30 s e dão erro 500 | o Atlas não liberou `0.0.0.0/0` ou a `MONGO_URI` está errada |
 | Link do e-mail leva para `127.0.0.1` | falta `SITE_URL` |
 | Primeira visita demora ~1 minuto | o site estava dormindo (plano grátis); é normal |
+| Lembretes de sessão não chegam | falta o agendador do passo 6, ou o `LEMBRETES_TOKEN` do GitHub/cron é diferente do que está no Render (o endereço responde 403 com token errado e 404 se a variável não existe) |
 
 Depois de alterar qualquer variável no Render (**Environment**), ele reinicia o
 site sozinho.

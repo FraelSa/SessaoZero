@@ -140,6 +140,14 @@ Rotas disponíveis (prefixo `/contas/`):
 | `/contas/logout/` | sair | — |
 | `/contas/recuperar-senha/` | pedir link de redefinição | RF04 |
 | `/contas/redefinir-senha/<token>/` | escolher nova senha | RF04 |
+| `/contas/perfil/` | editar a biografia (com moderação) e o avatar | RF01 |
+| `/contas/conta/` | trocar nome de usuário, e-mail (com link de confirmação) e senha | RF01 |
+| `/contas/confirmar-novo-email/<token>/` | confirmar o e-mail novo (link enviado a ele) | RF01 |
+
+Nome de usuário e e-mail são copiados em várias coleções (campanhas,
+inscrições, comentários, chat, avaliações, avisos). `accounts/identidade.py`
+acerta todas as cópias na troca; leia o comentário no topo do arquivo antes de
+mexer nele ou de criar um campo novo que guarde um desses dois valores.
 
 Em desenvolvimento, o e-mail de redefinição de senha não é enviado de
 verdade: ele aparece impresso no terminal onde o `runserver` está rodando
@@ -169,7 +177,10 @@ Rotas disponíveis (prefixo `/campanhas/`):
 | `/campanhas/<id>/` | ver detalhes, inscrever-se e comentar | RF02, RF06, RF08 |
 | `/campanhas/<id>/editar/` | editar (só o mestre) | RF02 |
 | `/campanhas/<id>/excluir/` | excluir, com confirmação (só o mestre) | RF02 |
-| `/campanhas/<id>/inscrever/` | inscrever o usuário logado (respeita vagas) | RF06 |
+| `/campanhas/<id>/inscrever/` | inscrever o usuário logado (respeita vagas; recusa mesa encerrada) | RF07 |
+| `/campanhas/<id>/sair/` | o jogador cancela a inscrição, com confirmação | RF07 |
+| `/campanhas/<id>/encerrar/` | o mestre encerra a campanha, com confirmação | RF02 |
+| `/campanhas/<id>/reabrir/` | o mestre reabre uma campanha encerrada | RF02 |
 | `/campanhas/<id>/comentar/` | adicionar comentário | RF08 |
 
 Regras já tratadas nas views: só o mestre que criou a campanha pode
@@ -208,7 +219,30 @@ Novo app `notificacoes/`, com o model `Notificacao` (coleção
 - o **mestre edita** título, sinopse, sistema ou número de vagas —
   notifica os jogadores inscritos;
 - **alguém se inscreve** numa campanha — notifica o mestre;
-- **alguém comenta** numa campanha — notifica o mestre.
+- **alguém comenta** numa campanha — notifica o mestre;
+- **a campanha é excluída, encerrada ou reaberta** — notifica os inscritos;
+- **um jogador sai da mesa** — notifica o mestre;
+- **a próxima sessão está a menos de 24 horas** — lembrete para o mestre e os
+  inscritos (ver abaixo).
+
+### Lembretes de sessão
+
+`notificacoes/lembretes.py` envia o lembrete (sininho e, se a pessoa não
+desligou, e-mail), com o horário no fuso de cada pessoa. Cada sessão é lembrada
+uma vez só, inclusive nas campanhas que se repetem, e campanhas encerradas ou
+sem data são ignoradas. Quem dispara é um agendador externo, de hora em hora,
+porque o plano gratuito do Render não tem cron:
+
+```bash
+python manage.py enviar_lembretes_sessao            # envia
+python manage.py enviar_lembretes_sessao --simular  # só mostra quem seria avisado
+python manage.py enviar_lembretes_sessao --horas 48 # muda a antecedência (padrão 24)
+```
+
+No site publicado, o agendador chama `POST /notificacoes/lembretes/` com o
+cabeçalho `Authorization: Bearer <LEMBRETES_TOKEN>`. Sem a variável
+`LEMBRETES_TOKEN`, esse endereço responde 404. O passo a passo está no
+`DEPLOY.md`.
 
 Rota: `/notificacoes/` (usuário logado) — lista as notificações e marca
 todas como lidas ao abrir. O menu mostra um contador de não lidas. Por

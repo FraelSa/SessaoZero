@@ -919,6 +919,7 @@ input[type="file"]::file-selector-button {
 .perfil-publico__lista { margin: 0 0 2rem; padding: 0; list-style: none; display: grid; gap: 0.75rem; }
 .perfil-publico__lista li { padding: 0.4rem 0 0.4rem 1rem; border-left: 3px solid var(--linha); }
 .perfil-publico__lista p { margin: 0.2rem 0 0; max-width: 65ch; overflow-wrap: anywhere; }
+.perfil-publico__bio { overflow-wrap: anywhere; }
 
 /* RNF03 - política de privacidade */
 .politica h2 { margin-top: 2rem; }
