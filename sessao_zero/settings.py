@@ -255,3 +255,9 @@ SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 # RNF03 - e-mail para onde as pessoas escrevem sobre os seus dados (aparece na
 # Política de Privacidade). Deixe em branco se ainda não houver um.
 CONTATO_PRIVACIDADE = config("CONTATO_PRIVACIDADE", default="")
+
+# RF08 - senha do endereço /notificacoes/lembretes/, que um agendador externo
+# chama de hora em hora para enviar os lembretes de sessão (o plano gratuito do
+# Render não tem cron). Vazia, o endereço fica desligado. Gere um valor longo e
+# aleatório, por exemplo: python -c "import secrets; print(secrets.token_urlsafe(32))"
+LEMBRETES_TOKEN = config("LEMBRETES_TOKEN", default="")

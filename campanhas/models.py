@@ -97,6 +97,11 @@ class Campanha(Document):
     # de relógio nele. Campanhas antigas foram marcadas em America/Bahia.
     fuso_mestre = StringField(default=FUSO_PADRAO)
 
+    # RF08 - qual sessão (data em UTC sem fuso, a de `proxima_sessao`) já teve o
+    # lembrete enviado. Evita avisar duas vezes a mesma sessão; como cada sessão
+    # de uma campanha recorrente tem a sua data, ela volta a ser lembrada.
+    lembrete_enviado_para = DateTimeField(null=True)
+
     max_jogadores = IntField(required=True, min_value=1)
     # RF07 - inscrição de jogadores interessados, de acordo com vagas livres
     jogadores_inscritos_emails = ListField(StringField(), default=list)

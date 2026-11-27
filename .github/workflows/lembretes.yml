@@ -1,0 +1,33 @@
+name: Lembretes de sessão
+
+# O plano gratuito do Render não tem agendador (cron). Este workflow chama, de
+# hora em hora, o endereço que envia os lembretes das sessões (RF08).
+#
+# Para ativar, crie em Settings > Secrets and variables > Actions > Secrets:
+#   SITE_URL         endereço do site, ex.: https://sessao-zero.onrender.com
+#   LEMBRETES_TOKEN  o mesmo valor da variável LEMBRETES_TOKEN do Render
+# Sem esses dois segredos o workflow não faz nada.
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+jobs:
+  lembretes:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Chamar o endereço de lembretes
+        env:
+          SITE_URL: ${{ secrets.SITE_URL }}
+          LEMBRETES_TOKEN: ${{ secrets.LEMBRETES_TOKEN }}
+        run: |
+          if [ -z "$SITE_URL" ] || [ -z "$LEMBRETES_TOKEN" ]; then
+            echo "Segredos SITE_URL e LEMBRETES_TOKEN não configurados; nada a fazer."
+            exit 0
+          fi
+          # O Render gratuito dorme quando ninguém acessa: a primeira chamada
+          # pode levar um minuto para acordar o site, por isso o tempo e as
+          # novas tentativas. Chamar duas vezes é inofensivo.
+          curl --fail --silent --show-error --max-time 100 --retry 2 --retry-delay 20 \
+            -X POST -H "Authorization: Bearer $LEMBRETES_TOKEN" \
+            "${SITE_URL%/}/notificacoes/lembretes/"

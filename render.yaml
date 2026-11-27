@@ -40,3 +40,8 @@ services:
       # Remetente no domínio autenticado na Brevo: Sessão Zero <naoresponda@seusite.com.br>
       - key: DEFAULT_FROM_EMAIL
         sync: false
+      # Senha do endereço /notificacoes/lembretes/ (lembretes de sessão, RF08).
+      # O Render gera o valor; copie-o em Environment para o agendador que chama
+      # esse endereço de hora em hora (ver sessao_zero/DEPLOY.md).
+      - key: LEMBRETES_TOKEN
+        generateValue: true
