@@ -50,7 +50,7 @@ services:
       # esse endereço de hora em hora (ver sessao_zero/DEPLOY.md).
       - key: LEMBRETES_TOKEN
         generateValue: true
-      # E-mails de quem pode revisar conteúdos denunciados e bloqueados (RNF04),
+      # E-mails de quem pode revisar os textos barrados pelo filtro (RNF04),
       # separados por vírgula. Essas pessoas veem o painel em /moderacao/.
       - key: MODERADORES_EMAILS
         sync: false

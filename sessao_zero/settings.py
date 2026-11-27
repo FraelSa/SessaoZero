@@ -179,9 +179,9 @@ MONGO_URI = config("MONGO_URI", default="mongodb://localhost:27017")
 
 # RNF01 / RNF06 - tempos limite. Sem eles, o PyMongo espera 30 segundos por um
 # servidor que não responde, e cada pessoa que abre o site nesse intervalo fica com
-# a página pendurada. Com eles, a requisição falha rápido (e o teste de saúde,
-# /saude/, avisa que o banco está fora do ar). O pool limita as conexões abertas
-# com o Atlas, cujo plano gratuito aceita 500 no total.
+# a página pendurada. Com eles, a requisição falha rápido (a pessoa vê a página
+# de instabilidade, 503) e o teste /saude/banco/ avisa que o banco está fora do ar.
+# O pool limita as conexões abertas com o Atlas, cujo plano gratuito aceita 500 no total.
 MONGO_OPCOES = {
     "serverSelectionTimeoutMS": config("MONGO_TEMPO_SELECAO_MS", default=5000, cast=int),
     "connectTimeoutMS": config("MONGO_TEMPO_CONEXAO_MS", default=5000, cast=int),
