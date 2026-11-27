@@ -35,7 +35,11 @@ def politica_privacidade(request):
     return render(
         request,
         "core/privacidade.html",
-        {"versao": politica.VERSAO, "contato": settings.CONTATO_PRIVACIDADE},
+        {
+            "versao": politica.VERSAO,
+            "contato": settings.CONTATO_PRIVACIDADE,
+            "prazos": politica.prazos(),
+        },
     )
 
 
