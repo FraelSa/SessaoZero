@@ -5,6 +5,7 @@ import datetime
 from io import StringIO
 from unittest import mock
 
+from django.core import mail
 from django.core.management import call_command
 from django.test import Client, override_settings
 
@@ -239,6 +240,7 @@ class EnderecoDoAgendadorTests(BaseLembrete):
         for metodo in ("get", "put", "delete"):
             resposta = getattr(Client(), metodo)(self.URL, **self.CABECALHO)
             self.assertEqual(resposta.status_code, 405)
+            self.assertEqual(resposta["Allow"], "POST")
 
     def test_funciona_sem_o_token_de_csrf(self):
         self.mesa_proxima()
@@ -248,10 +250,11 @@ class EnderecoDoAgendadorTests(BaseLembrete):
     @override_settings(LEMBRETES_TOKEN="")
     def test_sem_token_configurado_o_endereco_nao_existe(self):
         self.mesa_proxima()
-        # Nem o cabeçalho vazio libera: o recurso está desligado.
+        # Nem o cabeçalho vazio libera: o recurso está desligado, para qualquer método.
         for extras in ({}, {"HTTP_AUTHORIZATION": "Bearer "}):
             resposta = Client().post(self.URL, **extras)
             self.assertEqual(resposta.status_code, 404)
+        self.assertEqual(Client().get(self.URL).status_code, 404)
         self.assertEqual(self.total_de_avisos(), 0)
 
 
@@ -279,6 +282,17 @@ class ComandoTests(BaseLembrete):
         self.mesa(data_sessao=datetime.datetime.utcnow() + EM(hours=3))
         self.assertIn("0 lembrete(s) de 0 campanha(s)", self.rodar("--horas", "1"))
         self.assertIn("3 lembrete(s) de 1 campanha(s)", self.rodar("--horas", "6"))
+
+    def test_os_emails_saem_antes_de_o_comando_terminar(self):
+        """O comando acaba logo depois de avisar; e-mail em segundo plano seria perdido."""
+        com_email = self.criar_usuario("comemail", notificar_por_email=True)
+        self.mesa(
+            data_sessao=datetime.datetime.utcnow() + EM(hours=3),
+            jogadores_inscritos_emails=[com_email.email],
+        )
+        self.rodar()
+        self.assertEqual([m.to for m in mail.outbox], [[com_email.email]])
+        self.assertIn('Lembrete: a sessão de "A Maldição de Strahd"', mail.outbox[0].body)
 
     def test_sem_nada_a_lembrar_diz_zero(self):
         self.assertIn("0 lembrete(s) de 0 campanha(s) enviados.", self.rodar())

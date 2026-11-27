@@ -31,6 +31,8 @@ class Command(BaseCommand):
         lembradas = enviar_lembretes(
             antecedencia=datetime.timedelta(hours=opcoes["horas"]),
             simular=opcoes["simular"],
+            # O comando termina logo depois de avisar: os e-mails saem antes disso.
+            em_segundo_plano=False,
         )
         for item in lembradas:
             quando = para_horario_local(item["sessao"])

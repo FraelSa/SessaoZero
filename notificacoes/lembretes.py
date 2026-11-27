@@ -53,12 +53,13 @@ def _destinatarios(campanha):
     return list(dict.fromkeys([campanha.mestre_email, *campanha.jogadores_inscritos_emails]))
 
 
-def enviar_lembretes(agora=None, antecedencia=ANTECEDENCIA, simular=False):
+def enviar_lembretes(agora=None, antecedencia=ANTECEDENCIA, simular=False, em_segundo_plano=True):
     """Envia os lembretes das sessões que começam dentro de `antecedencia`.
 
     Devolve uma lista com um item por campanha lembrada:
     {"titulo": ..., "sessao": data UTC da sessão, "avisos": quantas pessoas}.
     Com `simular=True` só calcula a lista: não avisa ninguém nem grava nada.
+    Com `em_segundo_plano=False`, os e-mails saem antes de a função voltar.
     """
     agora = agora or datetime.datetime.utcnow()
     limite = agora + antecedencia
@@ -95,6 +96,7 @@ def enviar_lembretes(agora=None, antecedencia=ANTECEDENCIA, simular=False):
                     email,
                     f'Lembrete: a sessão de "{campanha.titulo}" acontece em {quando}.',
                     url=url,
+                    em_segundo_plano=em_segundo_plano,
                 )
 
         lembradas.append({"titulo": campanha.titulo, "sessao": sessao, "avisos": len(emails)})

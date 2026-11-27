@@ -1,10 +1,9 @@
 import secrets
 
 from django.conf import settings
-from django.http import Http404, JsonResponse
+from django.http import Http404, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
 from mongoengine.errors import ValidationError as MongoValidationError
 
 from accounts.auth_utils import login_obrigatorio, usuario_atual
@@ -47,7 +46,6 @@ def ir_para_notificacao(request, notificacao_id):
 
 
 @csrf_exempt
-@require_POST
 def disparar_lembretes(request):
     """RF08 - endereço que um agendador externo chama de hora em hora para
     enviar os lembretes de sessão (o plano gratuito do Render não tem cron).
@@ -58,6 +56,8 @@ def disparar_lembretes(request):
     token = settings.LEMBRETES_TOKEN
     if not token:
         raise Http404("Lembretes por agendador não estão ativados.")
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
 
     enviado = request.headers.get("Authorization", "").encode()
     esperado = f"Bearer {token}".encode()

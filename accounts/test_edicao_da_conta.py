@@ -506,6 +506,17 @@ class EmailTests(BaseEdicao):
         self.confirmar()
         self.assertEqual(self.client.get("/notificacoes/").context["notificacoes"].count(), 2)
 
+    def test_a_exportacao_mostra_o_email_aguardando_confirmacao(self):
+        self.assertIsNone(self.client.post("/contas/exportar/").json()["conta"]["email_aguardando_confirmacao"])
+        self.pedir()
+        conta = self.client.post("/contas/exportar/").json()["conta"]
+        self.assertEqual(conta["email"], "ana@exemplo.com")
+        self.assertEqual(conta["email_aguardando_confirmacao"], NOVO)
+        self.confirmar()
+        conta = self.client.post("/contas/exportar/").json()["conta"]
+        self.assertEqual(conta["email"], NOVO)
+        self.assertIsNone(conta["email_aguardando_confirmacao"])
+
     def test_a_exportacao_traz_o_email_novo(self):
         self.pedir()
         self.confirmar()

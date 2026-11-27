@@ -38,7 +38,11 @@ def _enviar_email(destinatario_email, texto, url):
         logger.exception("Falha ao enviar e-mail de notificação para %s", destinatario_email)
 
 
-def notificar(destinatario_email, texto, url=""):
+def notificar(destinatario_email, texto, url="", em_segundo_plano=True):
+    """Grava o aviso e, se a pessoa não desligou, manda o e-mail. Por padrão o
+    e-mail sai em segundo plano, para a página não esperar o servidor de e-mail;
+    um comando de terminal, que acaba logo depois de avisar, usa
+    `em_segundo_plano=False` para o processo não terminar antes do envio."""
     if not destinatario_email:
         return None
 
@@ -48,10 +52,12 @@ def notificar(destinatario_email, texto, url=""):
 
     usuario = Usuario.objects(email=destinatario_email, ativo=True).first()
     if usuario and usuario.notificar_por_email and not usuario.aguardando_confirmacao:
-        # Em segundo plano, para a página não esperar o servidor de e-mail.
-        threading.Thread(
-            target=_enviar_email, args=(usuario.email, texto, url), daemon=True
-        ).start()
+        if em_segundo_plano:
+            threading.Thread(
+                target=_enviar_email, args=(usuario.email, texto, url), daemon=True
+            ).start()
+        else:
+            _enviar_email(usuario.email, texto, url)
 
     return notificacao
 
