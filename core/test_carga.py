@@ -176,6 +176,8 @@ class TesteContraUmServidorDeVerdadeTests(LiveServerTestCase):
         self.assertEqual(resultado["logins"], {"ok": 2, "falhas": 0})
         paginas = set(resultado["resumo"]["paginas"])
         self.assertTrue(paginas & set(carga.PAGINAS_DE_USUARIO), "nenhuma página de quem está logado")
+        # O envio da senha (hash lento) é medido como qualquer outra página.
+        self.assertEqual(resultado["resumo"]["paginas"][carga.ROTULO_DO_LOGIN]["requisicoes"], 2)
         self.assertEqual(resultado["resumo"]["geral"]["falhas"], 0)
         self.assertEqual(resultado["problemas"], [])
 

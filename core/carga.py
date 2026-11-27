@@ -8,7 +8,9 @@ Uso, a partir do seu computador, contra o site já publicado:
 
 O resultado mostra, para cada página, o tempo de resposta mediano e dos 95% mais
 rápidos (p95), e avisa quando alguma passa dos 2 segundos pedidos pelo RNF01 ou
-quando mais de 1% das requisições falha. Rode contra o endereço público, nunca contra
+quando mais de 1% das requisições falha. Com --entrar, o envio da senha também é
+medido ("POST /contas/login/"): o hash é lento de propósito e, num servidor com
+pouca CPU, pode passar do limite. Rode contra o endereço público, nunca contra
 o site de outra pessoa: é carga de verdade.
 
 Limites deste teste (leia antes de tirar conclusões):
@@ -44,6 +46,7 @@ PAGINAS_PUBLICAS = (
     "/privacidade/",
     "/contas/login/",
 )
+ROTULO_DO_LOGIN = "POST /contas/login/"
 # Páginas de quem está logado: as mais pesadas (recomendação, listas pessoais).
 PAGINAS_DE_USUARIO = (
     "/campanhas/recomendadas/",
@@ -196,19 +199,23 @@ def aquecer(base):
     return segundos
 
 
-def _entrar(base, abridor, email, senha):
-    """Faz o login e devolve True se funcionou (a sessão fica no `abridor`)."""
+def _entrar(base, abridor, email, senha, medidas):
+    """Faz o login e devolve True se funcionou (a sessão fica no `abridor`).
+
+    O envio da senha entra nas medidas como "POST /contas/login/": é a operação mais
+    pesada do site (o hash da senha é lento de propósito) e conta para o limite de 2 s."""
     status, corpo, _ = _abrir(base, "/contas/login/", abridor)
     achado = re.search(rb'name="csrfmiddlewaretoken" value="([^"]+)"', corpo)
     if status != 200 or not achado:
         return False
-    status, corpo, _ = _abrir(
+    status, corpo, segundos = _abrir(
         base,
         "/contas/login/",
         abridor,
         dados={"csrfmiddlewaretoken": achado.group(1).decode(), "email": email, "senha": senha},
         cabecalhos={"Referer": base + "/contas/login/", "Origin": base},
     )
+    medidas.append(Medida(ROTULO_DO_LOGIN, segundos, status))
     # Quem entra é levado à página inicial; quem erra a senha volta ao formulário.
     return status == 200 and b'name="senha"' not in corpo
 
@@ -221,7 +228,7 @@ def _usuario_virtual(base, fim, pausa_s, subida_s, login, medidas):
     paginas = list(PAGINAS_PUBLICAS)
     entrou = None
     if login:
-        entrou = _entrar(base, abridor, *login)
+        entrou = _entrar(base, abridor, *login, medidas)
         if entrou:
             paginas += list(PAGINAS_DE_USUARIO)
     while time.monotonic() < fim:
