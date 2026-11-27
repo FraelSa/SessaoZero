@@ -64,6 +64,11 @@ TEMAS_SENSIVEIS = (
 )
 
 
+# RNF05 - os comentários ficam dentro do documento da campanha (o MongoDB aceita
+# 16 MB por documento) e a página os carrega junto: o limite mantém os dois sob controle.
+MAX_COMENTARIOS = 1000
+
+
 class Comentario(EmbeddedDocument):
     # RF09 - seção de comentários em cada postagem/campanha
     autor_email = StringField(required=True)
@@ -115,7 +120,17 @@ class Campanha(Document):
 
     meta = {
         "collection": "campanhas",
-        "indexes": ["mestre_email", "sistema_rpg", "status"],
+        "indexes": [
+            "mestre_email",
+            "sistema_rpg",
+            "status",
+            # A lista pública ordena por data (e o desempate pelo id mantém as
+            # páginas estáveis); "Minhas inscrições" e a recomendação buscam pelo
+            # e-mail dentro da lista de inscritos.
+            {"fields": ["-criado_em", "-id"]},
+            {"fields": ["status", "-criado_em"]},
+            "jogadores_inscritos_emails",
+        ],
         "ordering": ["-criado_em"],
     }
 
@@ -163,27 +178,68 @@ class Campanha(Document):
 
     def inscrever_jogador(self, email_jogador):
         """RF07 - só inscreve se a mesa não estiver encerrada, ainda houver vaga
-        e a pessoa não estiver dentro."""
+        e a pessoa não estiver dentro.
+
+        RNF05 - a conferência que vale é a do banco, numa operação só: com muita
+        gente na página ao mesmo tempo, duas pessoas pedem a última vaga vendo a
+        mesma lista; uma lista regravada inteira perderia uma das inscrições, ou
+        passaria da lotação. Aqui o banco só acrescenta a pessoa se ela ainda não
+        estiver dentro, a mesa não estiver encerrada e a posição da última vaga
+        continuar vazia."""
         if email_jogador in self.jogadores_inscritos_emails:
             return False, "Você já está inscrito nesta campanha."
         if self.status == "encerrada":
             return False, "Esta campanha está encerrada e não aceita novas inscrições."
         if self.vagas_livres <= 0:
             return False, "Não há vagas livres nesta campanha."
-        self.jogadores_inscritos_emails.append(email_jogador)
-        self.sincronizar_status()
-        self.save()
+
+        inscreveu = Campanha.objects(
+            id=self.id,
+            status__ne="encerrada",
+            jogadores_inscritos_emails__ne=email_jogador,
+            **{f"jogadores_inscritos_emails__{self.max_jogadores - 1}__exists": False},
+        ).update_one(push__jogadores_inscritos_emails=email_jogador)
+
+        if not inscreveu:
+            # Alguém passou na frente (ou a mesa mudou) desde que esta cópia foi lida.
+            self.reload("jogadores_inscritos_emails", "status")
+            if email_jogador in self.jogadores_inscritos_emails:
+                return False, "Você já está inscrito nesta campanha."
+            if self.status == "encerrada":
+                return False, "Esta campanha está encerrada e não aceita novas inscrições."
+            return False, "Não há vagas livres nesta campanha."
+
+        self._acompanhar_vagas()
         return True, "Inscrição realizada com sucesso."
 
     def remover_jogador(self, email_jogador):
         """RF07 - cancela a inscrição: a vaga volta a ficar livre e uma mesa
-        lotada reabre. Numa mesa encerrada o status continua encerrado."""
-        if email_jogador not in self.jogadores_inscritos_emails:
+        lotada reabre. Numa mesa encerrada o status continua encerrado.
+        (Também atômico, pelo mesmo motivo de `inscrever_jogador`.)"""
+        removeu = Campanha.objects(
+            id=self.id, jogadores_inscritos_emails=email_jogador
+        ).update_one(pull__jogadores_inscritos_emails=email_jogador)
+        if not removeu:
+            self.reload("jogadores_inscritos_emails", "status")
             return False, "Você não está inscrito nesta campanha."
-        self.jogadores_inscritos_emails.remove(email_jogador)
-        self.sincronizar_status()
-        self.save()
+
+        self._acompanhar_vagas()
         return True, "Inscrição cancelada."
+
+    def _acompanhar_vagas(self):
+        """Faz o status seguir as vagas depois de uma entrada ou saída: lotada
+        quando a última cadeira foi ocupada, aberta quando uma vaga reapareceu.
+        Cada troca só vale se o banco ainda estiver no estado que a justifica, então
+        entradas e saídas simultâneas chegam ao mesmo resultado em qualquer ordem.
+        Mesa encerrada fica como está."""
+        ultima = f"jogadores_inscritos_emails__{self.max_jogadores - 1}__exists"
+        Campanha.objects(id=self.id, status="aberta", **{ultima: True}).update_one(
+            set__status="lotada"
+        )
+        Campanha.objects(id=self.id, status="lotada", **{ultima: False}).update_one(
+            set__status="aberta"
+        )
+        self.reload("jogadores_inscritos_emails", "status")
 
     def encerrar(self):
         """RF02 - o mestre dá a mesa por encerrada: ela deixa de aceitar
@@ -201,13 +257,19 @@ class Campanha(Document):
         self.save()
 
     def adicionar_comentario(self, autor_email, autor_username, texto):
-        """RF09 - comentários para conversas e dúvidas sobre a campanha."""
+        """RF09 - comentários para conversas e dúvidas sobre a campanha.
+
+        RNF05 - o comentário é acrescentado pelo próprio banco (e não gravando de
+        novo a lista toda, o que perderia comentários feitos ao mesmo tempo). Como
+        os comentários ficam dentro do documento da campanha, há um limite de
+        MAX_COMENTARIOS por campanha; passando dele, devolve None."""
         comentario = Comentario(
             autor_email=autor_email, autor_username=autor_username, texto=texto
         )
-        self.comentarios.append(comentario)
-        self.save()
-        return comentario
+        gravou = Campanha.objects(
+            id=self.id, **{f"comentarios__{MAX_COMENTARIOS - 1}__exists": False}
+        ).update_one(push__comentarios=comentario)
+        return comentario if gravou else None
 
     def __str__(self):
         return f"{self.titulo} ({self.sistema_rpg})"

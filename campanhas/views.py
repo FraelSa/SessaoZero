@@ -14,6 +14,7 @@ from core.horario import (
     para_utc_ingenuo,
     rotulo_fuso,
 )
+from core.paginacao import paginar
 from moderacao.filtros import moderar_nome, moderar_sinopse, moderar_texto
 from moderacao.models import ConteudoBloqueado
 from moderacao.servicos import moderar_campos
@@ -52,10 +53,17 @@ CAMPOS_MODERADOS_DA_CAMPANHA = {
 }
 
 
+# RNF01 / RNF05 - quantas campanhas a lista pública mostra por página e quantos
+# comentários cabem na página de uma campanha.
+CAMPANHAS_POR_PAGINA = 12
+COMENTARIOS_NA_PAGINA = 100
+
+
 def listar_campanhas(request):
     """RF02 - listagem pública das campanhas (todas, inclusive as lotadas),
-    com filtro por sistema e busca por palavra-chave que se combinam."""
-    campanhas = Campanha.objects.order_by("-criado_em")
+    com filtro por sistema e busca por palavra-chave que se combinam, em páginas
+    de CAMPANHAS_POR_PAGINA. Os comentários não são carregados (a ficha não os usa)."""
+    campanhas = Campanha.objects.exclude("comentarios").order_by("-criado_em", "-id")
 
     sistema_filtro = request.GET.get("sistema", "")
     if sistema_filtro == SISTEMA_PROPRIO:
@@ -68,15 +76,18 @@ def listar_campanhas(request):
     if busca:
         campanhas = filtrar_por_palavras(campanhas, busca)
 
+    pagina, parametros = paginar(request, campanhas, CAMPANHAS_POR_PAGINA)
     return render(
         request,
         "campanhas/listar.html",
         {
-            "campanhas": campanhas,
+            "campanhas": pagina,
+            "pagina": pagina,
+            "parametros": parametros,
             "sistema_filtro": sistema_filtro,
             "sistemas": SISTEMAS_RPG_COMUNS,
             "busca": busca,
-            "total": campanhas.count() if (busca or sistema_filtro) else None,
+            "total": pagina.paginator.count if (busca or sistema_filtro) else None,
         },
     )
 
@@ -87,7 +98,9 @@ def minhas_campanhas(request):
     primeiro as abertas e lotadas, depois as encerradas, das mais novas para
     as mais antigas."""
     usuario = usuario_atual(request)
-    campanhas = list(Campanha.objects(mestre_email=usuario.email).order_by("-criado_em"))
+    campanhas = list(
+        Campanha.objects(mestre_email=usuario.email).exclude("comentarios").order_by("-criado_em")
+    )
     return render(
         request,
         "campanhas/minhas_campanhas.html",
@@ -108,7 +121,7 @@ def minhas_inscricoes(request):
     agora = datetime.datetime.utcnow()
 
     proximas, sem_data, realizadas = [], [], []
-    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email):
+    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email).exclude("comentarios"):
         proxima = campanha.proxima_sessao
         if proxima is None:
             sem_data.append(campanha)
@@ -143,11 +156,16 @@ def detalhe_campanha(request, campanha_id):
     # RF06 - quem participa da campanha vê o formulário para avaliar os outros.
     alvos = alvos_do_usuario(campanha, usuario) if usuario else []
 
+    # RNF01 / RNF05 - só os comentários mais novos vão para a página.
+    todos_os_comentarios = sorted(campanha.comentarios, key=lambda c: c.criado_em, reverse=True)
+
     return render(
         request,
         "campanhas/detalhe.html",
         {
             "campanha": campanha,
+            "comentarios": todos_os_comentarios[:COMENTARIOS_NA_PAGINA],
+            "comentarios_total": len(todos_os_comentarios),
             "comentario_form": ComentarioForm(),
             "ja_inscrito": ja_inscrito,
             "eh_mestre": eh_mestre,
@@ -169,8 +187,8 @@ def campanhas_recomendadas(request):
 
     tem_perfil = bool(
         (usuario.preferencias and any(usuario.preferencias.values()))
-        or Campanha.objects(mestre_email=usuario.email).first()
-        or Campanha.objects(jogadores_inscritos_emails=usuario.email).first()
+        or Campanha.objects(mestre_email=usuario.email).only("id").first()
+        or Campanha.objects(jogadores_inscritos_emails=usuario.email).only("id").first()
     )
 
     return render(
@@ -536,7 +554,9 @@ def comentar_campanha(request, campanha_id):
                 messages.error(request, motivo)
                 return redirect("detalhe_campanha", campanha_id=campanha.id)
 
-            campanha.adicionar_comentario(usuario.email, usuario.username, texto)
+            if campanha.adicionar_comentario(usuario.email, usuario.username, texto) is None:
+                messages.error(request, "Esta campanha já atingiu o limite de comentários.")
+                return redirect("detalhe_campanha", campanha_id=campanha.id)
             messages.success(request, "Comentário adicionado.")
 
             # RF08 - avisa o mestre quando alguém (que não é ele mesmo)

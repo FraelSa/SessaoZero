@@ -7,9 +7,13 @@ from django.views.decorators.csrf import csrf_exempt
 from mongoengine.errors import ValidationError as MongoValidationError
 
 from accounts.auth_utils import login_obrigatorio, usuario_atual
+from core.paginacao import paginar
 
 from .lembretes import enviar_lembretes
 from .models import Notificacao
+
+# RNF01 / RNF05 - a lista de avisos é mostrada em páginas.
+NOTIFICACOES_POR_PAGINA = 30
 
 
 @login_obrigatorio
@@ -21,7 +25,12 @@ def listar_notificacoes(request):
     # comum em redes sociais (estilo "sininho").
     notificacoes.filter(lida=False).update(lida=True)
 
-    return render(request, "notificacoes/listar.html", {"notificacoes": notificacoes})
+    pagina, parametros = paginar(request, notificacoes, NOTIFICACOES_POR_PAGINA)
+    return render(
+        request,
+        "notificacoes/listar.html",
+        {"notificacoes": pagina, "pagina": pagina, "parametros": parametros},
+    )
 
 
 @login_obrigatorio

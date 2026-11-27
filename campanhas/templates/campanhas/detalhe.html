@@ -73,8 +73,11 @@
                     <p><a href="{% url 'login' %}">Entre</a> para comentar.</p>
                 {% endif %}
 
+                {% if comentarios_total > comentarios|length %}
+                    <p class="comentarios__nota" role="status">Mostrando os {{ comentarios|length }} comentários mais recentes, de {{ comentarios_total }}.</p>
+                {% endif %}
                 <ul class="comentarios">
-                    {% for comentario in campanha.comentarios|dictsortreversed:"criado_em" %}
+                    {% for comentario in comentarios %}
                         <li class="comentario{% if comentario.autor_email == campanha.mestre_email %} comentario--mestre{% endif %}">
                             <div class="comentario__cabeca">
                                 <span class="comentario__quem">

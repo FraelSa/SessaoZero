@@ -27,6 +27,11 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from .models import Campanha
 
+# RNF01 / RNF05 - o cálculo de similaridade cresce com o número de campanhas
+# comparadas, e roda a cada acesso à página. Compara-se o perfil com as
+# campanhas abertas mais recentes, até este limite.
+CANDIDATAS_MAX = 300
+
 # Peso extra para o sistema de RPG: ele é o atributo mais forte de "isso é
 # parecido com o que eu gosto" (jogar D&D nada tem a ver com Call of
 # Cthulhu, mesmo que as sinopses usem palavras parecidas).
@@ -53,11 +58,12 @@ def _texto_do_perfil(usuario):
             partes.append(str(valor))
 
     # Histórico implícito: campanhas que o usuário mestra...
-    for campanha in Campanha.objects(mestre_email=usuario.email):
+    campos = ("sistema_rpg", "titulo", "sinopse")
+    for campanha in Campanha.objects(mestre_email=usuario.email).only(*campos):
         partes.append(_texto_da_campanha(campanha))
 
     # ...e campanhas em que ele está inscrito como jogador.
-    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email):
+    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email).only(*campos):
         partes.append(_texto_da_campanha(campanha))
 
     return " ".join(partes)
@@ -73,6 +79,8 @@ def recomendar_campanhas(usuario, limite=5):
         Campanha.objects(status="aberta")
         .filter(mestre_email__ne=usuario.email)
         .filter(jogadores_inscritos_emails__ne=usuario.email)
+        .exclude("comentarios")
+        .order_by("-criado_em", "-id")[:CANDIDATAS_MAX]
     )
     # Só mesas com vaga: o status é mantido coerente (Campanha.sincronizar_status),
     # mas este filtro protege também dados gravados por versões antigas.

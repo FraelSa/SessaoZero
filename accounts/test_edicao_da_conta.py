@@ -504,7 +504,7 @@ class EmailTests(BaseEdicao):
         self.montar_a_vida_da_ana()
         self.pedir()
         self.confirmar()
-        self.assertEqual(self.client.get("/notificacoes/").context["notificacoes"].count(), 2)
+        self.assertEqual(len(self.client.get("/notificacoes/").context["notificacoes"]), 2)
 
     def test_a_exportacao_mostra_o_email_aguardando_confirmacao(self):
         self.assertIsNone(self.client.post("/contas/exportar/").json()["conta"]["email_aguardando_confirmacao"])
