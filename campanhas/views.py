@@ -334,6 +334,11 @@ def excluir_campanha(request, campanha_id):
         return redirect("detalhe_campanha", campanha_id=campanha.id)
 
     if request.method == "POST":
+        # RF08 - quem estava inscrito precisa saber que a mesa deixou de existir.
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi excluída pelo mestre.',
+        )
         # As mensagens do chat pertencem à campanha: saem junto com ela.
         MensagemChat.objects(campanha_id=str(campanha.id)).delete()
         campanha.delete()
@@ -363,6 +368,127 @@ def inscrever_campanha(request, campanha_id):
                     f'{usuario.username} se inscreveu na sua campanha "{campanha.titulo}".',
                     url=reverse("detalhe_campanha", args=[campanha.id]),
                 )
+
+    return redirect("detalhe_campanha", campanha_id=campanha.id)
+
+
+@login_obrigatorio
+def sair_da_campanha(request, campanha_id):
+    """RF07 - o jogador cancela a própria inscrição, com confirmação. A vaga
+    volta a ficar livre (uma mesa lotada reabre) e o mestre é avisado."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+    destino = redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email == campanha.mestre_email:
+        messages.error(
+            request,
+            "Você é o mestre desta campanha. Para largá-la, use Encerrar ou Excluir campanha.",
+        )
+        return destino
+    if usuario.email not in campanha.jogadores_inscritos_emails:
+        messages.error(request, "Você não está inscrito nesta campanha.")
+        return destino
+
+    if request.method == "POST":
+        sucesso, mensagem = campanha.remover_jogador(usuario.email)
+        if not sucesso:
+            messages.error(request, mensagem)
+            return destino
+
+        # RF08 - avisa o mestre. Numa mesa encerrada não há vaga a divulgar.
+        aviso = f'{usuario.username} saiu da sua campanha "{campanha.titulo}".'
+        if campanha.status != "encerrada":
+            aviso += " Uma vaga foi liberada."
+        notificar(campanha.mestre_email, aviso, url=reverse("detalhe_campanha", args=[campanha.id]))
+
+        messages.success(request, f'Você saiu da campanha "{campanha.titulo}".')
+        return destino
+
+    return render(
+        request,
+        "campanhas/confirmar_acao.html",
+        {
+            "campanha": campanha,
+            "titulo_pagina": "Sair da campanha",
+            "pergunta": "Tem certeza de que quer sair da campanha",
+            "explicacao": (
+                "Você perde o acesso ao chat e a sua vaga fica livre para outras pessoas. "
+                "Se ainda houver vaga, dá para se inscrever de novo depois."
+            ),
+            "rotulo_botao": "Sair da campanha",
+            "classe_botao": "botao--perigo",
+        },
+    )
+
+
+@login_obrigatorio
+def encerrar_campanha(request, campanha_id):
+    """RF02 - o mestre dá a campanha por encerrada, com confirmação. Ela deixa
+    de aceitar inscrições, as avaliações abrem e os inscritos são avisados.
+    Dá para reabrir depois."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+    destino = redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email != campanha.mestre_email:
+        messages.error(request, "Só o mestre da campanha pode encerrá-la.")
+        return destino
+    if campanha.status == "encerrada":
+        messages.info(request, "Esta campanha já está encerrada.")
+        return destino
+
+    if request.method == "POST":
+        campanha.encerrar()
+        # RF08 - mudança de estado da campanha.
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi encerrada pelo mestre. '
+            "As avaliações de quem jogou nela estão liberadas.",
+            url=reverse("detalhe_campanha", args=[campanha.id]),
+        )
+        messages.success(request, "Campanha encerrada.")
+        return destino
+
+    return render(
+        request,
+        "campanhas/confirmar_acao.html",
+        {
+            "campanha": campanha,
+            "titulo_pagina": "Encerrar campanha",
+            "pergunta": "Tem certeza de que quer encerrar a campanha",
+            "explicacao": (
+                "Ela deixa de aceitar novas inscrições, as avaliações entre os participantes "
+                "são liberadas e os inscritos recebem um aviso. Você pode reabri-la depois."
+            ),
+            "rotulo_botao": "Encerrar campanha",
+            "classe_botao": "botao--perigo",
+        },
+    )
+
+
+@login_obrigatorio
+def reabrir_campanha(request, campanha_id):
+    """RF02 - desfaz o encerramento: a campanha volta a ser aberta (ou lotada,
+    se não sobrou vaga) e os inscritos são avisados."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+
+    if request.method != "POST":
+        return redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email != campanha.mestre_email:
+        messages.error(request, "Só o mestre da campanha pode reabri-la.")
+    elif campanha.status != "encerrada":
+        messages.info(request, "Esta campanha não está encerrada.")
+    else:
+        campanha.reabrir()
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi reaberta pelo mestre.',
+            url=reverse("detalhe_campanha", args=[campanha.id]),
+        )
+        messages.success(request, "Campanha reaberta.")
 
     return redirect("detalhe_campanha", campanha_id=campanha.id)
 

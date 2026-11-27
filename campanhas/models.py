@@ -157,15 +157,43 @@ class Campanha(Document):
         self.status = "lotada" if self.vagas_livres == 0 else "aberta"
 
     def inscrever_jogador(self, email_jogador):
-        """RF07 - só inscreve se ainda houver vaga e a pessoa não estiver dentro."""
+        """RF07 - só inscreve se a mesa não estiver encerrada, ainda houver vaga
+        e a pessoa não estiver dentro."""
         if email_jogador in self.jogadores_inscritos_emails:
             return False, "Você já está inscrito nesta campanha."
+        if self.status == "encerrada":
+            return False, "Esta campanha está encerrada e não aceita novas inscrições."
         if self.vagas_livres <= 0:
             return False, "Não há vagas livres nesta campanha."
         self.jogadores_inscritos_emails.append(email_jogador)
         self.sincronizar_status()
         self.save()
         return True, "Inscrição realizada com sucesso."
+
+    def remover_jogador(self, email_jogador):
+        """RF07 - cancela a inscrição: a vaga volta a ficar livre e uma mesa
+        lotada reabre. Numa mesa encerrada o status continua encerrado."""
+        if email_jogador not in self.jogadores_inscritos_emails:
+            return False, "Você não está inscrito nesta campanha."
+        self.jogadores_inscritos_emails.remove(email_jogador)
+        self.sincronizar_status()
+        self.save()
+        return True, "Inscrição cancelada."
+
+    def encerrar(self):
+        """RF02 - o mestre dá a mesa por encerrada: ela deixa de aceitar
+        inscrições e as avaliações (RF06) abrem, mesmo sem data de sessão."""
+        self.status = "encerrada"
+        self.atualizado_em = datetime.datetime.utcnow()
+        self.save()
+
+    def reabrir(self):
+        """RF02 - desfaz `encerrar`: o status volta a seguir as vagas (aberta,
+        ou lotada se não sobrou vaga)."""
+        self.status = "aberta"
+        self.sincronizar_status()
+        self.atualizado_em = datetime.datetime.utcnow()
+        self.save()
 
     def adicionar_comentario(self, autor_email, autor_username, texto):
         """RF09 - comentários para conversas e dúvidas sobre a campanha."""

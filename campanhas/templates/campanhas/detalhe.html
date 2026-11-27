@@ -114,11 +114,22 @@
                     {% if eh_mestre %}
                         <a class="botao" href="{% url 'sala_chat' campanha.id %}">Abrir o chat</a>
                         <a class="botao botao--secundario" href="{% url 'editar_campanha' campanha.id %}">Editar campanha</a>
+                        {% if campanha.status == "encerrada" %}
+                            <form method="post" action="{% url 'reabrir_campanha' campanha.id %}">
+                                {% csrf_token %}
+                                <button class="botao botao--secundario botao--cheio" type="submit">Reabrir campanha</button>
+                            </form>
+                        {% else %}
+                            <a class="botao botao--secundario" href="{% url 'encerrar_campanha' campanha.id %}">Encerrar campanha</a>
+                        {% endif %}
                         <a class="botao botao--perigo-contorno" href="{% url 'excluir_campanha' campanha.id %}">Excluir campanha</a>
                     {% elif usuario_logado %}
                         {% if ja_inscrito %}
                             <a class="botao" href="{% url 'sala_chat' campanha.id %}">Abrir o chat</a>
                             <p class="campo__ajuda">Você está inscrito(a) nesta campanha.</p>
+                            <a class="botao botao--perigo-contorno" href="{% url 'sair_da_campanha' campanha.id %}">Sair da campanha</a>
+                        {% elif campanha.status == "encerrada" %}
+                            <p class="campo__ajuda">Esta campanha está encerrada e não aceita novas inscrições.</p>
                         {% else %}
                             <form method="post" action="{% url 'inscrever_campanha' campanha.id %}">
                                 {% csrf_token %}
@@ -127,6 +138,8 @@
                                 </button>
                             </form>
                         {% endif %}
+                    {% elif campanha.status == "encerrada" %}
+                        <p class="campo__ajuda">Esta campanha está encerrada e não aceita novas inscrições.</p>
                     {% else %}
                         <p><a href="{% url 'login' %}">Entre</a> para se inscrever nesta campanha.</p>
                     {% endif %}

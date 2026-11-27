@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block titulo %}{{ titulo_pagina }} - Sessão Zero{% endblock %}
+
+{% block conteudo %}
+    <section class="painel">
+        <h1>{{ titulo_pagina }}</h1>
+        <form class="caixa" method="post">
+            {% csrf_token %}
+            <p>{{ pergunta }} <strong>{{ campanha.titulo }}</strong>?</p>
+            <p class="campo__ajuda">{{ explicacao }}</p>
+            <div class="acoes">
+                <button class="botao {{ classe_botao }}" type="submit">{{ rotulo_botao }}</button>
+                <a class="botao botao--secundario" href="{% url 'detalhe_campanha' campanha.id %}">Cancelar</a>
+            </div>
+        </form>
+    </section>
+{% endblock %}

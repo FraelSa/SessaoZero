@@ -12,6 +12,9 @@ urlpatterns = [
     path("<str:campanha_id>/editar/", views.editar_campanha, name="editar_campanha"),
     path("<str:campanha_id>/excluir/", views.excluir_campanha, name="excluir_campanha"),
     path("<str:campanha_id>/inscrever/", views.inscrever_campanha, name="inscrever_campanha"),
+    path("<str:campanha_id>/sair/", views.sair_da_campanha, name="sair_da_campanha"),
+    path("<str:campanha_id>/encerrar/", views.encerrar_campanha, name="encerrar_campanha"),
+    path("<str:campanha_id>/reabrir/", views.reabrir_campanha, name="reabrir_campanha"),
     path("<str:campanha_id>/comentar/", views.comentar_campanha, name="comentar_campanha"),
     path(
         "<str:campanha_id>/avaliar/<str:username>/",
