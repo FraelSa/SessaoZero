@@ -22,6 +22,8 @@ from campanhas.avaliacoes import avaliacoes_recebidas, reputacao
 from campanhas.models import Campanha
 from core import politica
 from core.horario import FUSO_PADRAO, IDS_FUSOS
+from moderacao.filtros import moderar_texto
+from moderacao.models import ConteudoBloqueado
 
 from .avatares import AVATARES_PRONTOS, IDS_AVATARES_PRONTOS, svg_iniciais
 from .auth_utils import fazer_login, fazer_logout, login_obrigatorio, usuario_atual
@@ -32,7 +34,9 @@ from .forms import (
     ESTILOS_PREFERENCIA,
     SENHA_MAX_CARACTERES,
     SISTEMAS_PREFERENCIA,
+    AlterarEmailForm,
     AlterarSenhaForm,
+    AlterarUsernameForm,
     CadastroForm,
     ExcluirContaForm,
     LoginForm,
@@ -42,6 +46,7 @@ from .forms import (
     ReenviarConfirmacaoForm,
     SolicitarRecuperacaoForm,
 )
+from .identidade import trocar_email, trocar_username
 from .models import CadastroPendente, FotoPerfil, Usuario
 
 DURACAO_TOKEN_RECUPERACAO = datetime.timedelta(hours=1)
@@ -399,14 +404,32 @@ def perfil_publico(request, username):
     )
 
 
+def _bio_aceita(form, usuario):
+    """RNF04 - a biografia é pública, então passa pela mesma moderação dos
+    comentários. Só é conferida quando o texto mudou. Devolve False (e põe o
+    motivo no campo) se for barrada; a tentativa fica registrada."""
+    bio = form.cleaned_data["bio"]
+    if not bio or bio == (usuario.bio or ""):
+        return True
+    aceito, motivo = moderar_texto(bio)
+    if aceito:
+        return True
+    ConteudoBloqueado.objects.create(
+        autor_email=usuario.email, texto_original=bio, motivo=motivo, origem="perfil:bio"
+    )
+    form.add_error("bio", motivo)
+    return False
+
+
 @login_obrigatorio
 def editar_perfil(request):
-    """Perfil do usuário: por enquanto, a escolha do avatar."""
+    """RF01 - perfil do usuário: a biografia e a escolha do avatar."""
     usuario = usuario_atual(request)
 
     if request.method == "POST":
         form = PerfilForm(request.POST, request.FILES, tem_foto=usuario.tem_foto)
-        if form.is_valid():
+        if form.is_valid() and _bio_aceita(form, usuario):
+            usuario.bio = form.cleaned_data["bio"]
             escolha = form.cleaned_data["avatar"]
             foto = form.cleaned_data["foto"]  # bytes já tratados, ou None
             usuario_id = str(usuario.id)
@@ -438,7 +461,7 @@ def editar_perfil(request):
             atual = usuario.avatar_preset
         else:
             atual = "iniciais"
-        form = PerfilForm(initial={"avatar": atual}, tem_foto=usuario.tem_foto)
+        form = PerfilForm(initial={"avatar": atual, "bio": usuario.bio or ""}, tem_foto=usuario.tem_foto)
 
     url_avatar = reverse("avatar_usuario", args=[usuario.username])
     opcoes_avatar = [{"valor": "iniciais", "nome": "Iniciais", "src": url_avatar + "?padrao=1"}]
@@ -499,26 +522,175 @@ def editar_preferencias(request):
     return render(request, "accounts/preferencias.html", {"form": form})
 
 
+def _enviar_email_troca(usuario, novo_email, token):
+    """Manda o link de confirmação para o endereço NOVO. Levanta exceção se o
+    envio falhar (quem chama decide o que mostrar na tela)."""
+    link = settings.SITE_URL.rstrip("/") + reverse("confirmar_novo_email", args=[token])
+    send_mail(
+        subject="Sessão Zero - Confirme o seu novo e-mail",
+        message=(
+            f"Olá, {usuario.username}!\n\n"
+            "Para trocar o e-mail da sua conta na Sessão Zero para este endereço, "
+            f"confirme pelo link abaixo (válido por 24 horas):\n{link}\n\n"
+            "Se você não pediu essa troca, pode ignorar este e-mail: nada vai mudar."
+        ),
+        from_email=settings.DEFAULT_FROM_EMAIL,
+        recipient_list=[novo_email],
+    )
+
+
+def _email_pendente(usuario):
+    """O endereço aguardando confirmação (ou None se não há pedido ou ele expirou)."""
+    expira_em = usuario.token_novo_email_expira_em
+    if usuario.novo_email and expira_em and expira_em > datetime.datetime.utcnow():
+        return usuario.novo_email
+    return None
+
+
+def _limpar_pedido_de_email(usuario):
+    usuario.novo_email = None
+    usuario.token_novo_email = None
+    usuario.token_novo_email_expira_em = None
+    usuario.save()
+
+
+def _salvar_novo_username(request, usuario, form):
+    """RF01 - troca o nome de usuário (e as cópias dele). True se deu certo."""
+    novo = form.cleaned_data["novo_username"]
+    try:
+        trocar_username(usuario, novo)
+    except NotUniqueError:
+        # Outra pessoa levou o nome entre a conferência e o salvamento.
+        usuario.reload()
+        form.add_error("novo_username", "Esse nome de usuário já está em uso.")
+        return False
+    messages.success(request, f"Nome de usuário alterado para {novo}.")
+    return True
+
+
+def _pedir_troca_de_email(request, usuario, form):
+    """RF01 - primeiro passo da troca de e-mail: guarda o endereço novo e manda
+    um link de confirmação para ele. O e-mail da conta só muda quando a pessoa
+    clica no link (ver confirmar_novo_email). True se o pedido foi feito."""
+    novo = form.cleaned_data["novo_email"]
+    agora = datetime.datetime.utcnow()
+
+    # Limita o ritmo de e-mails: o pedido anterior pode ser deduzido da validade do link.
+    if usuario.token_novo_email_expira_em:
+        pedido_em = usuario.token_novo_email_expira_em - DURACAO_TOKEN_CONFIRMACAO
+        espera = math.ceil((pedido_em + INTERVALO_REENVIO - agora).total_seconds())
+        if espera > 0:
+            form.add_error(None, f"Aguarde {espera} segundos para pedir outra troca de e-mail.")
+            return False
+
+    token = secrets.token_urlsafe(32)
+    try:
+        _enviar_email_troca(usuario, novo, token)
+    except Exception:  # noqa: BLE001 - qualquer falha de SMTP
+        logger.exception("Falha ao enviar e-mail de troca de endereço para %s", novo)
+        form.add_error(
+            None,
+            "Não conseguimos enviar o e-mail de confirmação agora. "
+            "Confira o endereço e tente de novo em instantes.",
+        )
+        return False
+
+    # O pedido só é gravado depois que o e-mail saiu.
+    usuario.novo_email = novo
+    usuario.token_novo_email = token
+    usuario.token_novo_email_expira_em = agora + DURACAO_TOKEN_CONFIRMACAO
+    usuario.save()
+    messages.success(
+        request,
+        f"Enviamos um link de confirmação para {novo}. "
+        "O e-mail da sua conta só muda depois que você clicar nele.",
+    )
+    return True
+
+
 @login_obrigatorio
 def minha_conta(request):
-    """RF01 - editar a conta: trocar a senha (com a senha atual). A exclusão da
-    conta tem tela própria, com confirmação."""
+    """RF01 - editar a conta: nome de usuário, e-mail (com confirmação por link
+    e a senha atual) e senha (com a senha atual). A exclusão da conta tem tela
+    própria, com confirmação.
+
+    A página tem um formulário para cada uma dessas trocas; o campo escondido
+    `acao` diz qual foi enviado. Sem ele, vale o da senha (o formulário original)."""
     usuario = usuario_atual(request)
+    form_senha = AlterarSenhaForm(usuario=usuario)
+    form_usuario = AlterarUsernameForm(usuario=usuario, prefix="usuario")
+    form_email = AlterarEmailForm(usuario=usuario, prefix="email")
 
     if request.method == "POST":
-        form = AlterarSenhaForm(request.POST, usuario=usuario)
-        if form.is_valid():
-            usuario.set_senha(form.cleaned_data["nova_senha"])
-            # Qualquer link de recuperação pendente deixa de valer.
-            usuario.token_recuperacao_senha = None
-            usuario.token_recuperacao_expira_em = None
-            usuario.save()
-            messages.success(request, "Senha alterada.")
-            return redirect("minha_conta")
-    else:
-        form = AlterarSenhaForm(usuario=usuario)
+        acao = request.POST.get("acao", "senha")
+        if acao == "usuario":
+            form_usuario = AlterarUsernameForm(request.POST, usuario=usuario, prefix="usuario")
+            if form_usuario.is_valid() and _salvar_novo_username(request, usuario, form_usuario):
+                return redirect("minha_conta")
+        elif acao == "email":
+            form_email = AlterarEmailForm(request.POST, usuario=usuario, prefix="email")
+            if form_email.is_valid() and _pedir_troca_de_email(request, usuario, form_email):
+                return redirect("minha_conta")
+        else:
+            form_senha = AlterarSenhaForm(request.POST, usuario=usuario)
+            if form_senha.is_valid():
+                usuario.set_senha(form_senha.cleaned_data["nova_senha"])
+                # Qualquer link de recuperação pendente deixa de valer.
+                usuario.token_recuperacao_senha = None
+                usuario.token_recuperacao_expira_em = None
+                usuario.save()
+                messages.success(request, "Senha alterada.")
+                return redirect("minha_conta")
 
-    return render(request, "accounts/minha_conta.html", {"form": form, "usuario": usuario})
+    return render(
+        request,
+        "accounts/minha_conta.html",
+        {
+            "form": form_senha,
+            "form_usuario": form_usuario,
+            "form_email": form_email,
+            "email_pendente": _email_pendente(usuario),
+            "usuario": usuario,
+        },
+    )
+
+
+def confirmar_novo_email(request, token):
+    """RF01 - passo final da troca de e-mail: a pessoa clica no link recebido no
+    endereço novo e só então ele passa a ser o e-mail da conta, com tudo que
+    estava ligado ao antigo (campanhas, inscrições, avisos...) acompanhando."""
+    usuario = Usuario.objects(
+        token_novo_email=token, token_novo_email_expira_em__gt=datetime.datetime.utcnow()
+    ).first()
+    if usuario is None or not usuario.novo_email:
+        messages.error(
+            request,
+            "Esse link de confirmação é inválido ou expirou. "
+            "Peça a troca de e-mail de novo em Minha conta.",
+        )
+        return redirect("minha_conta")
+
+    novo = usuario.novo_email
+    # Outra pessoa pode ter criado uma conta com esse e-mail enquanto o link esperava.
+    ocupado = bool(
+        Usuario.objects(email=novo, id__ne=usuario.id, aguardando_confirmacao__ne=True).first()
+    )
+    if not ocupado:
+        try:
+            trocar_email(usuario, novo)
+        except NotUniqueError:
+            ocupado = True
+    if ocupado:
+        _limpar_pedido_de_email(usuario)
+        messages.error(
+            request,
+            "Esse e-mail passou a ser usado por outra conta, então a troca não foi feita. "
+            "O e-mail da sua conta continua o mesmo.",
+        )
+        return redirect("minha_conta")
+
+    messages.success(request, f"E-mail alterado para {novo}. Use o novo endereço para entrar.")
+    return redirect("minha_conta")
 
 
 @login_obrigatorio

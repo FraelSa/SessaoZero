@@ -60,6 +60,13 @@ class Usuario(Document):
     token_confirmacao = StringField(null=True)
     token_confirmacao_expira_em = DateTimeField(null=True)
 
+    # RF01 - troca de e-mail. O endereço novo fica aqui, com um link de confirmação
+    # enviado a ELE, até a pessoa confirmar; só então vira `email` (ver
+    # accounts/identidade.py). Contas antigas, sem os campos, não têm pedido.
+    novo_email = EmailField(null=True)
+    token_novo_email = StringField(null=True)
+    token_novo_email_expira_em = DateTimeField(null=True)
+
     # Receber um e-mail a cada notificação do sistema (editável em Preferências).
     notificar_por_email = BooleanField(default=True)
 
