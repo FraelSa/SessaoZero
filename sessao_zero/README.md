@@ -387,7 +387,7 @@ do sistema só depende de `moderar_texto` e `moderar_nome`.
 - **Chat:** cada conexão pode enviar até 5 mensagens em 10 segundos. O limite é
   por conexão, não por pessoa.
 - **Arquivos estáticos:** o WhiteNoise serve CSS, fontes e imagens com nome que
-  muda quando o conteúdo muda e cache de 1 ano, comprimidos (gzip). As fontes de
+  muda quando o conteúdo muda e cache de longa duração (10 anos, imutável), comprimidos (gzip). As fontes de
   letra (Public Sans e Young Serif, licença OFL) são do próprio site: nenhuma
   página pede nada ao Google.
 - **Banco:** tempos limite de seleção e de conexão de 5 segundos e de resposta de

@@ -20,6 +20,13 @@ FONTES = (
     "young-serif-latin-400-normal.woff2",
 )
 PAGINAS_PUBLICAS = ("/", "/campanhas/", "/contas/login/", "/contas/cadastro/", "/privacidade/")
+UM_ANO = 365 * 24 * 3600
+
+
+def segundos_de_cache(resposta):
+    """O max-age do Cache-Control, como número (comparar o texto confunde 1 ano com 10)."""
+    achado = re.search(r"max-age=(\d+)", resposta.headers.get("Cache-Control", ""))
+    return int(achado.group(1)) if achado else 0
 
 
 class FontesDoProprioSiteTests(MongoTestCase):
@@ -79,12 +86,11 @@ class EstaticosEmProducaoTests(MongoTestCase):
         self.assertIsNotNone(achado, "o CSS não saiu com o resumo no nome")
         return achado.group(1)
 
-    def test_o_css_tem_o_resumo_no_nome_e_sai_com_cache_de_um_ano(self):
+    def test_o_css_tem_o_resumo_no_nome_e_sai_com_cache_de_pelo_menos_um_ano(self):
         resposta = Client().get(self.endereco_do_css())
         self.assertEqual(resposta.status_code, 200)
-        cache = resposta.headers["Cache-Control"]
-        self.assertIn("max-age=31536000", cache)
-        self.assertIn("immutable", cache)
+        self.assertGreaterEqual(segundos_de_cache(resposta), UM_ANO)
+        self.assertIn("immutable", resposta.headers["Cache-Control"])
 
     def test_o_css_aponta_para_as_fontes_com_o_resumo_e_elas_tambem_tem_cache_longo(self):
         css = b"".join(Client().get(self.endereco_do_css()).streaming_content).decode()
@@ -94,6 +100,7 @@ class EstaticosEmProducaoTests(MongoTestCase):
             self.assertRegex(nome, r"\.[0-9a-f]{12}\.woff2$")
             resposta = Client().get(f"/static/core/fonts/{nome}")
             self.assertEqual(resposta.status_code, 200, nome)
+            self.assertGreaterEqual(segundos_de_cache(resposta), UM_ANO, nome)
             self.assertIn("immutable", resposta.headers["Cache-Control"])
 
     def test_o_preload_das_fontes_usa_o_nome_com_resumo(self):

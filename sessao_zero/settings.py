@@ -217,7 +217,7 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    # RNF01 - nomes com resumo e cache de 1 ano (ver core/armazenamento.py).
+    # RNF01 - nomes com resumo e cache de longa duração (ver core/armazenamento.py).
     "staticfiles": {"BACKEND": "core.armazenamento.ArmazenamentoDeEstaticos"},
 }
 
