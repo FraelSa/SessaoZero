@@ -16,6 +16,11 @@ import datetime
 
 from mongoengine import BooleanField, DateTimeField, Document, StringField
 
+# RNF03 - os avisos contam o que a pessoa fez e recebeu na rede (quem entrou na
+# mesa dela, mudança de data...). Não ficam para sempre: o MongoDB apaga cada um
+# sozinho depois deste prazo (índice TTL). Informado na Política de Privacidade.
+RETENCAO_DIAS = 90
+
 
 class Notificacao(Document):
     destinatario_email = StringField(required=True)
@@ -27,7 +32,12 @@ class Notificacao(Document):
 
     meta = {
         "collection": "notificacoes",
-        "indexes": ["destinatario_email", "-criado_em"],
+        "indexes": [
+            # A contagem de não lidas roda em toda página de quem está logado.
+            {"fields": ["destinatario_email", "lida"]},
+            {"fields": ["destinatario_email", "-criado_em"]},
+            {"fields": ["criado_em"], "expireAfterSeconds": RETENCAO_DIAS * 24 * 3600},
+        ],
         "ordering": ["-criado_em"],
     }
 

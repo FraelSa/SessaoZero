@@ -12,6 +12,11 @@ services:
     # O disco do Render é apagado a cada reinício, então as tabelas internas do
     # Django (SQLite) são recriadas aqui. O daphne atende HTTP e o WebSocket do chat.
     startCommand: python manage.py migrate --noinput && daphne -b 0.0.0.0 -p $PORT --proxy-headers sessao_zero.asgi:application
+    # RNF06 - o Render consulta este endereço a cada poucos segundos e reinicia o
+    # serviço se ele parar de responder (e cancela um deploy que nasça doente).
+    # É de propósito uma página que não toca no banco: se o MongoDB cair, reiniciar
+    # o site não adianta. Para o monitor externo (UptimeRobot) use /saude/banco/.
+    healthCheckPath: /saude/
     envVars:
       - key: PYTHON_VERSION
         value: "3.13"
@@ -40,3 +45,27 @@ services:
       # Remetente no domínio autenticado na Brevo: Sessão Zero <naoresponda@seusite.com.br>
       - key: DEFAULT_FROM_EMAIL
         sync: false
+      # Senha do endereço /notificacoes/lembretes/ (lembretes de sessão, RF08).
+      # O Render gera o valor; copie-o em Environment para o agendador que chama
+      # esse endereço de hora em hora (ver sessao_zero/DEPLOY.md).
+      - key: LEMBRETES_TOKEN
+        generateValue: true
+      # E-mails de quem pode revisar os textos barrados pelo filtro (RNF04),
+      # separados por vírgula. Essas pessoas veem o painel em /moderacao/.
+      - key: MODERADORES_EMAILS
+        sync: false
+      # RNF05 (opcional) - para o chat funcionar com mais de um processo do site,
+      # descomente o bloco abaixo e o serviço "keyvalue" mais adiante.
+      # - key: REDIS_URL
+      #   fromService:
+      #     type: keyvalue
+      #     name: sessao-zero-redis
+      #     property: connectionString
+
+  # RNF05 (opcional) - Redis do Render, usado só para o chat entre processos.
+  # O plano gratuito não guarda dados em disco, o que não importa aqui: as
+  # mensagens do chat ficam no MongoDB; o Redis só repassa os avisos em tempo real.
+  # - type: keyvalue
+  #   name: sessao-zero-redis
+  #   plan: free
+  #   ipAllowList: []  # só conexões internas (da rede privada do Render)

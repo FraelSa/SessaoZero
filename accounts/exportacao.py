@@ -49,6 +49,8 @@ def montar_exportacao(usuario):
     conta = {
         "nome_de_usuario": usuario.username,
         "email": usuario.email,
+        # Troca de e-mail pedida e ainda não confirmada (None se não há pedido).
+        "email_aguardando_confirmacao": usuario.novo_email or None,
         "biografia": usuario.bio or "",
         "criada_em": _iso(usuario.criado_em),
         "fuso_horario": usuario.fuso_horario,

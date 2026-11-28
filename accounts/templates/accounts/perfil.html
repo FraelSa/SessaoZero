@@ -16,6 +16,13 @@
                 </div>
             </div>
 
+            <div class="campo">
+                <label for="{{ form.bio.id_for_label }}">{{ form.bio.label }}</label>
+                {{ form.bio }}
+                <p class="campo__ajuda" id="{{ form.bio.id_for_label }}_helptext">{{ form.bio.help_text }}</p>
+                {% if form.bio.errors %}<p class="campo__erro">{{ form.bio.errors|striptags }}</p>{% endif %}
+            </div>
+
             <fieldset class="campo">
                 <legend>Escolha um avatar</legend>
                 <div class="avatares">

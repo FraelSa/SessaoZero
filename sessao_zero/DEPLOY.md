@@ -99,9 +99,11 @@ recusar, o comando mostra o motivo.
    | `SITE_URL` | `https://seusite.com.br` |
    | `BREVO_API_KEY` | a chave da Brevo (passo 3) |
    | `DEFAULT_FROM_EMAIL` | `Sessão Zero <naoresponda@seusite.com.br>` |
+   | `MODERADORES_EMAILS` | o seu e-mail (e o de quem for ajudar), separados por vírgula: quem está na lista abre o painel `/moderacao/` |
 
-   `DJANGO_SECRET_KEY` é gerada sozinha, e o endereço `*.onrender.com` já é
-   liberado automaticamente.
+   `DJANGO_SECRET_KEY` e `LEMBRETES_TOKEN` são geradas sozinhas, e o endereço
+   `*.onrender.com` já é liberado automaticamente. Se o serviço já existia,
+   adicione `MODERADORES_EMAILS` em **Environment**.
 3. Clique em **Apply**. A primeira publicação leva alguns minutos (aba
    **Logs**). Quando terminar, o site abre no endereço
    `https://sessao-zero.onrender.com` (ou parecido, se o nome estiver ocupado).
@@ -109,6 +111,23 @@ recusar, o comando mostra o motivo.
 
 Toda vez que um arquivo novo for enviado para a `main` do GitHub, o Render
 publica a nova versão sozinho.
+
+**Ao publicar a versão com as melhorias de segurança (RNF02 e RNF03):**
+
+- Os links de confirmação de cadastro, de recuperação de senha e de troca de
+  e-mail pedidos antes da publicação deixam de funcionar (o banco passou a
+  guardar só um resumo do código). Quem estiver no meio disso precisa pedir de
+  novo.
+- O site passa a redirecionar HTTP para HTTPS e a enviar o HSTS, que começa com
+  prazo de 1 hora de propósito. Depois de confirmar que tudo funciona por HTTPS
+  (cadastro, login, chat), crie em **Environment** a variável
+  `DJANGO_HSTS_SEGUNDOS` com `31536000` (1 ano). Um HSTS longo demais, num
+  domínio que ainda não serve HTTPS direito, deixa o site inacessível para quem
+  já o visitou.
+- Em **Settings → Health Check Path** do serviço deve constar `/saude/` (o
+  `render.yaml` já define isso quando o serviço nasce de um Blueprint; se ele
+  foi criado antes, preencha à mão). É o endereço que o Render consulta para
+  decidir se o site está vivo.
 
 ## 5. Domínio: apontar a Hostinger para o Render
 
@@ -133,6 +152,89 @@ publica a nova versão sozinho.
 Depois disso, os arquivos que estiverem na `public_html` da Hostinger deixam de
 ser usados pelo domínio.
 
+## 6. Lembretes de sessão (agendador)
+
+O site avisa o mestre e os jogadores inscritos 24 horas antes de cada sessão
+(sininho e e-mail). O plano grátis do Render não tem agendador, então alguém
+precisa chamar o site de hora em hora. Sem isso, o resto do site funciona
+normalmente; só os lembretes não saem. Escolha **uma** das opções:
+
+**Opção A: GitHub Actions (o workflow já está no repositório).**
+
+1. No Render, abra o serviço → **Environment** e copie o valor de
+   `LEMBRETES_TOKEN`. O `render.yaml` gera esse valor sozinho; se o serviço foi
+   criado antes disso, crie a variável você mesmo com um texto longo e
+   aleatório (por exemplo, o resultado de
+   `python -c "import secrets; print(secrets.token_urlsafe(32))"`).
+2. No GitHub, abra o repositório → **Settings → Secrets and variables →
+   Actions → New repository secret** e crie dois segredos: `SITE_URL`
+   (`https://seusite.com.br`) e `LEMBRETES_TOKEN` (o mesmo valor do Render).
+3. Na aba **Actions**, abra **Lembretes de sessão → Run workflow** para testar.
+   O passo deve terminar em verde e mostrar algo como
+   `{"campanhas": 0, "avisos": 0}`. Depois disso ele roda sozinho, de hora em
+   hora (o GitHub pode atrasar alguns minutos).
+4. Em repositório **público**, o GitHub desativa workflows agendados depois de
+   60 dias sem atividade no repositório. Se isso acontecer, ele avisa por
+   e-mail e basta reativar o workflow na aba **Actions**.
+
+**Opção B: um serviço de cron gratuito** (por exemplo, cron-job.org). Crie uma
+tarefa de hora em hora que envie um `POST` para
+`https://seusite.com.br/notificacoes/lembretes/` com o cabeçalho
+`Authorization: Bearer <valor de LEMBRETES_TOKEN>`.
+
+Chamar mais de uma vez por hora é inofensivo: cada sessão é lembrada uma vez
+só. Para testar sem avisar ninguém, rode no computador
+`python manage.py enviar_lembretes_sessao --simular`.
+
+## 7. Monitoramento e teste de carga (RNF05 e RNF06)
+
+**Monitor de disponibilidade (UptimeRobot, grátis).** O Render só reinicia o site
+quando ele para de responder; ele não avisa você nem mede a disponibilidade do
+ano. Um monitor externo faz as duas coisas:
+
+1. Crie uma conta em <https://uptimerobot.com> (o plano grátis tem 50 monitores
+   com checagem a cada 5 minutos e é para uso pessoal e não comercial).
+2. **Add New Monitor**, tipo **HTTP(s)**, endereço
+   `https://seusite.com.br/saude/banco/`, intervalo de 5 minutos, e o seu e-mail
+   como contato de alerta.
+3. O endereço responde 200 quando o site e o MongoDB funcionam e 503 quando o
+   banco não responde. Com isso, uma queda do Atlas aparece como falha no
+   monitor (o `/saude/`, que o Render consulta, continua respondendo de
+   propósito, para o Render não reiniciar o site à toa).
+4. O histórico do monitor mostra a disponibilidade em porcentagem, que é o número
+   que o RNF06 pede (99,9% no ano permite cerca de 8 horas e 45 minutos de
+   parada).
+
+Efeito colateral a conhecer: como o monitor visita o site a cada 5 minutos, ele
+**não dorme mais**. Isso resolve a primeira visita de 1 minuto, mas o site passa
+a gastar entre 720 e 744 das 750 horas gratuitas do mês, o que só cabe para
+**um** serviço gratuito no mesmo workspace do Render (se as horas acabam, os
+serviços gratuitos são suspensos até o mês seguinte). Se preferir que ele durma, não crie
+o monitor, ou pause-o fora dos dias de uso.
+
+**Mais de um processo e o Redis.** O plano grátis do Render roda uma única
+instância. O chat guarda as mensagens em tempo real na memória do processo, o que
+só funciona com um processo. Se um dia o site rodar em um plano pago com mais de
+uma instância, ative o Redis: no `render.yaml`, descomente o serviço
+`sessao-zero-redis` e a variável `REDIS_URL` (o Render preenche o endereço
+interno), e aplique o Blueprint de novo. Sem mudar o código, o chat passa a
+circular pelo Redis.
+
+**Teste de carga.** Antes de uma apresentação, meça o site publicado. No seu
+computador, com o projeto instalado:
+
+```bash
+python manage.py teste_de_carga https://seusite.com.br --usuarios 100 --duracao 60
+```
+
+O relatório mostra o tempo de cada página (mediana e p95) e termina com erro se
+alguma passar de 2 segundos ou se mais de 1% das requisições falhar. O primeiro
+acesso, com o site dormindo, é medido à parte. Com `--entrar EMAIL:SENHA`, ele
+simula também gente logada (use uma conta de teste já confirmada). Cuidado:
+o teste gera carga de verdade, então rode só contra o seu site. O plano grátis
+tem pouca CPU, e o login, que calcula o hash da senha, é a operação que mais
+sofre com isso. Veja o README para os limites do teste.
+
 ## Problemas comuns
 
 | Sintoma | Causa provável |
@@ -143,6 +245,11 @@ ser usados pelo domínio.
 | Páginas demoram ~30 s e dão erro 500 | o Atlas não liberou `0.0.0.0/0` ou a `MONGO_URI` está errada |
 | Link do e-mail leva para `127.0.0.1` | falta `SITE_URL` |
 | Primeira visita demora ~1 minuto | o site estava dormindo (plano grátis); é normal |
+| Lembretes de sessão não chegam | falta o agendador do passo 6, ou o `LEMBRETES_TOKEN` do GitHub/cron é diferente do que está no Render (o endereço responde 403 com token errado e 404 se a variável não existe) |
+| Página "Estamos com uma instabilidade" (503) | o MongoDB não respondeu a tempo: confira o Atlas (cluster pausado, `0.0.0.0/0` removido, limite do plano grátis) e a `MONGO_URI`; o monitor do passo 7 avisa quando acontece |
+| Deploy cancelado ou site reiniciando em laço | o Render não recebe 200 em `/saude/`: veja **Logs**; se o domínio próprio ainda não está em `DJANGO_ALLOWED_HOSTS`, a resposta é 400 |
+| `/moderacao/` dá 404 | o seu e-mail não está em `MODERADORES_EMAILS` (a página some de propósito para quem não é moderador) |
+| Site em HTTPS fica inacessível depois de ligar o HSTS longo | o domínio perdeu o HTTPS; defina `DJANGO_HSTS_SEGUNDOS` de volta para `3600` e corrija o certificado (o navegador só esquece o HSTS quando o prazo acaba) |
 
 Depois de alterar qualquer variável no Render (**Environment**), ele reinicia o
 site sozinho.

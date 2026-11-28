@@ -10,9 +10,11 @@
             <div>
                 <h1>{{ pessoa.username }}</h1>
                 <p class="campo__ajuda">Na Sessão Zero desde {{ pessoa.criado_em|local|date:"d/m/Y" }}</p>
-                {% if eh_proprio %}<p><a href="{% url 'editar_perfil' %}">Trocar o meu avatar</a></p>{% endif %}
+                {% if eh_proprio %}<p><a href="{% url 'editar_perfil' %}">Editar meu perfil (biografia e avatar)</a></p>{% endif %}
             </div>
         </div>
+
+        {% if pessoa.bio %}<div class="texto-corrido perfil-publico__bio">{{ pessoa.bio|linebreaks }}</div>{% endif %}
 
         <h2>Avaliações recebidas</h2>
         <div class="perfil-publico__reputacao">

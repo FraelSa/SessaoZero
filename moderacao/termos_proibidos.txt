@@ -1,0 +1,44 @@
+# RNF04 - termos que o filtro de moderação barra (ver moderacao/filtros.py).
+#
+# Uma entrada por linha, em minúsculas e sem acento. Linhas que começam com #
+# são comentários. Só o singular masculino precisa ser escrito: o filtro já
+# testa o plural e o feminino ("burro" cobre burra, burros e burras) e aceita
+# letras repetidas, acentos, números no lugar de letras ("1d10t4") e letras
+# separadas ("i d i o t a"). Frases com mais de uma palavra valem como estão.
+#
+# O filtro compara PALAVRAS INTEIRAS, então "burro" não barra "aburrido".
+# Uso legítimo de um termo vai em EXCECOES, em moderacao/filtros.py.
+#
+# A lista é pequena e conservadora de propósito: só ofensas dirigidas a pessoas
+# e a grupos. Palavrão solto não entra, porque mesas de RPG têm classificação
+# indicativa e temas adultos. Ela precisa de curadoria de quem cuida da
+# comunidade: acrescente aqui o que aparecer no painel de moderação e remova o
+# que o painel marcar como falso positivo.
+
+# Ofensas diretas
+idiota
+imbecil
+burro
+babaca
+otario
+cretino
+retardado
+mongoloide
+debiloide
+escroto
+arrombado
+desgracado
+fdp
+filho da puta
+lixo humano
+vai se foder
+vai tomar no cu
+vsf
+vtnc
+
+# Ofensas a grupos (homofobia e transfobia)
+viado
+viadinho
+sapatao
+sapatoes
+traveco

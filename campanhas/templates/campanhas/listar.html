@@ -43,4 +43,6 @@
             <p class="vazio">Nenhuma campanha por enquanto.{% if usuario_logado %} Crie a primeira e convide jogadores.{% endif %}</p>
         {% endif %}
     {% endfor %}
+
+    {% include "partials/_paginacao.html" %}
 {% endblock %}

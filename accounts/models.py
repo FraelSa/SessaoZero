@@ -60,6 +60,13 @@ class Usuario(Document):
     token_confirmacao = StringField(null=True)
     token_confirmacao_expira_em = DateTimeField(null=True)
 
+    # RF01 - troca de e-mail. O endereço novo fica aqui, com um link de confirmação
+    # enviado a ELE, até a pessoa confirmar; só então vira `email` (ver
+    # accounts/identidade.py). Contas antigas, sem os campos, não têm pedido.
+    novo_email = EmailField(null=True)
+    token_novo_email = StringField(null=True)
+    token_novo_email_expira_em = DateTimeField(null=True)
+
     # Receber um e-mail a cada notificação do sistema (editável em Preferências).
     notificar_por_email = BooleanField(default=True)
 
@@ -72,6 +79,11 @@ class Usuario(Document):
     # Privacidade ao se cadastrar. Contas antigas não têm o registro.
     politica_aceita_em = DateTimeField(null=True)
     politica_versao = StringField(null=True)
+
+    # RNF02 - a sessão fica num cookie assinado, que o servidor não consegue
+    # apagar. Para encerrar as sessões abertas (ao trocar ou redefinir a senha), o
+    # cookie guarda este número, e uma sessão com número diferente deixa de valer.
+    sessao_versao = IntField(default=0)
 
     ativo = BooleanField(default=True)
     criado_em = DateTimeField(default=datetime.datetime.utcnow)
@@ -86,11 +98,43 @@ class Usuario(Document):
         self.senha_hash = make_password(senha_em_texto_puro)
 
     def checar_senha(self, senha_em_texto_puro):
-        """Usado no login (RF03) para validar e-mail + senha."""
-        return check_password(senha_em_texto_puro, self.senha_hash)
+        """Usado no login (RF03) para validar e-mail + senha.
+
+        RNF02 - se a senha confere mas o hash guardado é mais fraco que o atual
+        (menos repetições do algoritmo, ou outro algoritmo), ele é refeito na
+        hora, já que só agora temos a senha em mãos para isso."""
+        return check_password(
+            senha_em_texto_puro, self.senha_hash, setter=self._atualizar_hash
+        )
+
+    def _atualizar_hash(self, senha_em_texto_puro):
+        self.set_senha(senha_em_texto_puro)
+        # Só o hash: um save() inteiro apagaria alterações feitas em outro lugar.
+        Usuario.objects(id=self.id).update_one(set__senha_hash=self.senha_hash)
+
+    def encerrar_sessoes(self):
+        """Faz as sessões já abertas deixarem de valer (quem chama salva o usuário)."""
+        self.sessao_versao = (self.sessao_versao or 0) + 1
 
     def __str__(self):
         return f"{self.username} <{self.email}>"
+
+
+class TentativaLogin(Document):
+    """RNF02 / RNF03 - uma tentativa de senha errada, para limitar o ritmo de quem
+    tenta adivinhar uma senha (ver limite_login.py). Guarda só um resumo
+    irreversível do e-mail, e o MongoDB apaga o registro sozinho em uma hora."""
+
+    chave = StringField(required=True)
+    quando = DateTimeField(default=datetime.datetime.utcnow)
+
+    meta = {
+        "collection": "tentativas_login",
+        "indexes": [
+            "chave",
+            {"fields": ["quando"], "expireAfterSeconds": 3600},
+        ],
+    }
 
 
 class FotoPerfil(Document):

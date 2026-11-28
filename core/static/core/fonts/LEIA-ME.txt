@@ -1,0 +1,14 @@
+Fontes hospedadas no próprio site (RNF01 e RNF03)
+
+Antes, o navegador buscava as fontes no Google Fonts a cada visita: uma conexão
+extra antes de desenhar a página e o endereço IP de cada visitante enviado a um
+terceiro. Agora os arquivos saem do mesmo endereço do site, com cache longo.
+
+- Public Sans (400, 600 e 700) e Young Serif (400), subconjunto "latin" (cobre o
+  português), formato woff2. Origem: pacotes npm @fontsource/public-sans 5.3.0 e
+  @fontsource/young-serif 5.3.0.
+- Licença das duas: SIL Open Font License 1.1 (texto nos arquivos LICENSE-*.txt),
+  que permite hospedar e redistribuir as fontes.
+
+Para atualizar: npm install @fontsource/public-sans @fontsource/young-serif e
+copiar de node_modules/@fontsource/<fonte>/files/ os mesmos quatro arquivos.

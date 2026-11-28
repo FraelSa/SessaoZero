@@ -14,8 +14,10 @@ from core.horario import (
     para_utc_ingenuo,
     rotulo_fuso,
 )
-from moderacao.filtros import moderar_texto
+from core.paginacao import paginar
+from moderacao.filtros import moderar_nome, moderar_sinopse, moderar_texto
 from moderacao.models import ConteudoBloqueado
+from moderacao.servicos import moderar_campos
 from notificacoes.servicos import notificar, notificar_varios
 
 from .avaliacoes import (
@@ -43,10 +45,25 @@ def _texto_da_data(data_utc):
     return f"{para_horario_local(data_utc):%d/%m/%Y %H:%M} ({_rotulo_fuso_atual()})"
 
 
+# RNF04 - o que o mestre escreve na campanha é público e passa pela moderação.
+CAMPOS_MODERADOS_DA_CAMPANHA = {
+    "titulo": ("campanha:titulo", moderar_nome),
+    "sinopse": ("campanha:sinopse", moderar_sinopse),
+    "sistema_proprio": ("campanha:sistema", moderar_nome),
+}
+
+
+# RNF01 / RNF05 - quantas campanhas a lista pública mostra por página e quantos
+# comentários cabem na página de uma campanha.
+CAMPANHAS_POR_PAGINA = 12
+COMENTARIOS_NA_PAGINA = 100
+
+
 def listar_campanhas(request):
     """RF02 - listagem pública das campanhas (todas, inclusive as lotadas),
-    com filtro por sistema e busca por palavra-chave que se combinam."""
-    campanhas = Campanha.objects.order_by("-criado_em")
+    com filtro por sistema e busca por palavra-chave que se combinam, em páginas
+    de CAMPANHAS_POR_PAGINA. Os comentários não são carregados (a ficha não os usa)."""
+    campanhas = Campanha.objects.exclude("comentarios").order_by("-criado_em", "-id")
 
     sistema_filtro = request.GET.get("sistema", "")
     if sistema_filtro == SISTEMA_PROPRIO:
@@ -59,15 +76,18 @@ def listar_campanhas(request):
     if busca:
         campanhas = filtrar_por_palavras(campanhas, busca)
 
+    pagina, parametros = paginar(request, campanhas, CAMPANHAS_POR_PAGINA)
     return render(
         request,
         "campanhas/listar.html",
         {
-            "campanhas": campanhas,
+            "campanhas": pagina,
+            "pagina": pagina,
+            "parametros": parametros,
             "sistema_filtro": sistema_filtro,
             "sistemas": SISTEMAS_RPG_COMUNS,
             "busca": busca,
-            "total": campanhas.count() if (busca or sistema_filtro) else None,
+            "total": pagina.paginator.count if (busca or sistema_filtro) else None,
         },
     )
 
@@ -78,7 +98,9 @@ def minhas_campanhas(request):
     primeiro as abertas e lotadas, depois as encerradas, das mais novas para
     as mais antigas."""
     usuario = usuario_atual(request)
-    campanhas = list(Campanha.objects(mestre_email=usuario.email).order_by("-criado_em"))
+    campanhas = list(
+        Campanha.objects(mestre_email=usuario.email).exclude("comentarios").order_by("-criado_em")
+    )
     return render(
         request,
         "campanhas/minhas_campanhas.html",
@@ -99,7 +121,7 @@ def minhas_inscricoes(request):
     agora = datetime.datetime.utcnow()
 
     proximas, sem_data, realizadas = [], [], []
-    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email):
+    for campanha in Campanha.objects(jogadores_inscritos_emails=usuario.email).exclude("comentarios"):
         proxima = campanha.proxima_sessao
         if proxima is None:
             sem_data.append(campanha)
@@ -134,11 +156,16 @@ def detalhe_campanha(request, campanha_id):
     # RF06 - quem participa da campanha vê o formulário para avaliar os outros.
     alvos = alvos_do_usuario(campanha, usuario) if usuario else []
 
+    # RNF01 / RNF05 - só os comentários mais novos vão para a página.
+    todos_os_comentarios = sorted(campanha.comentarios, key=lambda c: c.criado_em, reverse=True)
+
     return render(
         request,
         "campanhas/detalhe.html",
         {
             "campanha": campanha,
+            "comentarios": todos_os_comentarios[:COMENTARIOS_NA_PAGINA],
+            "comentarios_total": len(todos_os_comentarios),
             "comentario_form": ComentarioForm(),
             "ja_inscrito": ja_inscrito,
             "eh_mestre": eh_mestre,
@@ -160,8 +187,8 @@ def campanhas_recomendadas(request):
 
     tem_perfil = bool(
         (usuario.preferencias and any(usuario.preferencias.values()))
-        or Campanha.objects(mestre_email=usuario.email).first()
-        or Campanha.objects(jogadores_inscritos_emails=usuario.email).first()
+        or Campanha.objects(mestre_email=usuario.email).only("id").first()
+        or Campanha.objects(jogadores_inscritos_emails=usuario.email).only("id").first()
     )
 
     return render(
@@ -178,7 +205,9 @@ def criar_campanha(request):
 
     if request.method == "POST":
         form = CampanhaForm(request.POST, rotulo_fuso=_rotulo_fuso_atual())
-        if form.is_valid():
+        if form.is_valid() and moderar_campos(
+            form, usuario.email, CAMPOS_MODERADOS_DA_CAMPANHA
+        ):
             dados = form.cleaned_data
             campanha = Campanha(
                 titulo=dados["titulo"],
@@ -233,7 +262,16 @@ def editar_campanha(request, campanha_id):
         form = CampanhaForm(
             request.POST, inscritos=inscritos, rotulo_fuso=_rotulo_fuso_atual()
         )
-        if form.is_valid():
+        # Só o que mudou é conferido: quem edita outra coisa não é barrado por
+        # um texto que já estava lá.
+        antigos = {
+            "titulo": campanha.titulo,
+            "sinopse": campanha.sinopse,
+            "sistema_proprio": campanha.sistema_rpg if campanha.tem_sistema_proprio else "",
+        }
+        if form.is_valid() and moderar_campos(
+            form, usuario.email, CAMPOS_MODERADOS_DA_CAMPANHA, antigos=antigos
+        ):
             dados = form.cleaned_data
             nova_data = para_utc_ingenuo(dados["data_sessao"])
             temas = list(dados["temas_sensiveis"])
@@ -334,6 +372,11 @@ def excluir_campanha(request, campanha_id):
         return redirect("detalhe_campanha", campanha_id=campanha.id)
 
     if request.method == "POST":
+        # RF08 - quem estava inscrito precisa saber que a mesa deixou de existir.
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi excluída pelo mestre.',
+        )
         # As mensagens do chat pertencem à campanha: saem junto com ela.
         MensagemChat.objects(campanha_id=str(campanha.id)).delete()
         campanha.delete()
@@ -368,6 +411,127 @@ def inscrever_campanha(request, campanha_id):
 
 
 @login_obrigatorio
+def sair_da_campanha(request, campanha_id):
+    """RF07 - o jogador cancela a própria inscrição, com confirmação. A vaga
+    volta a ficar livre (uma mesa lotada reabre) e o mestre é avisado."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+    destino = redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email == campanha.mestre_email:
+        messages.error(
+            request,
+            "Você é o mestre desta campanha. Para largá-la, use Encerrar ou Excluir campanha.",
+        )
+        return destino
+    if usuario.email not in campanha.jogadores_inscritos_emails:
+        messages.error(request, "Você não está inscrito nesta campanha.")
+        return destino
+
+    if request.method == "POST":
+        sucesso, mensagem = campanha.remover_jogador(usuario.email)
+        if not sucesso:
+            messages.error(request, mensagem)
+            return destino
+
+        # RF08 - avisa o mestre. Numa mesa encerrada não há vaga a divulgar.
+        aviso = f'{usuario.username} saiu da sua campanha "{campanha.titulo}".'
+        if campanha.status != "encerrada":
+            aviso += " Uma vaga foi liberada."
+        notificar(campanha.mestre_email, aviso, url=reverse("detalhe_campanha", args=[campanha.id]))
+
+        messages.success(request, f'Você saiu da campanha "{campanha.titulo}".')
+        return destino
+
+    return render(
+        request,
+        "campanhas/confirmar_acao.html",
+        {
+            "campanha": campanha,
+            "titulo_pagina": "Sair da campanha",
+            "pergunta": "Tem certeza de que quer sair da campanha",
+            "explicacao": (
+                "Você perde o acesso ao chat e a sua vaga fica livre para outras pessoas. "
+                "Se ainda houver vaga, dá para se inscrever de novo depois."
+            ),
+            "rotulo_botao": "Sair da campanha",
+            "classe_botao": "botao--perigo",
+        },
+    )
+
+
+@login_obrigatorio
+def encerrar_campanha(request, campanha_id):
+    """RF02 - o mestre dá a campanha por encerrada, com confirmação. Ela deixa
+    de aceitar inscrições, as avaliações abrem e os inscritos são avisados.
+    Dá para reabrir depois."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+    destino = redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email != campanha.mestre_email:
+        messages.error(request, "Só o mestre da campanha pode encerrá-la.")
+        return destino
+    if campanha.status == "encerrada":
+        messages.info(request, "Esta campanha já está encerrada.")
+        return destino
+
+    if request.method == "POST":
+        campanha.encerrar()
+        # RF08 - mudança de estado da campanha.
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi encerrada pelo mestre. '
+            "As avaliações de quem jogou nela estão liberadas.",
+            url=reverse("detalhe_campanha", args=[campanha.id]),
+        )
+        messages.success(request, "Campanha encerrada.")
+        return destino
+
+    return render(
+        request,
+        "campanhas/confirmar_acao.html",
+        {
+            "campanha": campanha,
+            "titulo_pagina": "Encerrar campanha",
+            "pergunta": "Tem certeza de que quer encerrar a campanha",
+            "explicacao": (
+                "Ela deixa de aceitar novas inscrições, as avaliações entre os participantes "
+                "são liberadas e os inscritos recebem um aviso. Você pode reabri-la depois."
+            ),
+            "rotulo_botao": "Encerrar campanha",
+            "classe_botao": "botao--perigo",
+        },
+    )
+
+
+@login_obrigatorio
+def reabrir_campanha(request, campanha_id):
+    """RF02 - desfaz o encerramento: a campanha volta a ser aberta (ou lotada,
+    se não sobrou vaga) e os inscritos são avisados."""
+    campanha = buscar_campanha_ou_404(campanha_id)
+    usuario = usuario_atual(request)
+
+    if request.method != "POST":
+        return redirect("detalhe_campanha", campanha_id=campanha.id)
+
+    if usuario.email != campanha.mestre_email:
+        messages.error(request, "Só o mestre da campanha pode reabri-la.")
+    elif campanha.status != "encerrada":
+        messages.info(request, "Esta campanha não está encerrada.")
+    else:
+        campanha.reabrir()
+        notificar_varios(
+            campanha.jogadores_inscritos_emails,
+            f'A campanha "{campanha.titulo}" foi reaberta pelo mestre.',
+            url=reverse("detalhe_campanha", args=[campanha.id]),
+        )
+        messages.success(request, "Campanha reaberta.")
+
+    return redirect("detalhe_campanha", campanha_id=campanha.id)
+
+
+@login_obrigatorio
 def comentar_campanha(request, campanha_id):
     """RF09 - seção de comentários da campanha."""
     campanha = buscar_campanha_ou_404(campanha_id)
@@ -390,7 +554,9 @@ def comentar_campanha(request, campanha_id):
                 messages.error(request, motivo)
                 return redirect("detalhe_campanha", campanha_id=campanha.id)
 
-            campanha.adicionar_comentario(usuario.email, usuario.username, texto)
+            if campanha.adicionar_comentario(usuario.email, usuario.username, texto) is None:
+                messages.error(request, "Esta campanha já atingiu o limite de comentários.")
+                return redirect("detalhe_campanha", campanha_id=campanha.id)
             messages.success(request, "Comentário adicionado.")
 
             # RF08 - avisa o mestre quando alguém (que não é ele mesmo)

@@ -22,7 +22,8 @@ class MensagemChat(Document):
 
     meta = {
         "collection": "mensagens_chat",
-        "indexes": ["campanha_id", "criado_em"],
+        # O histórico da sala busca as últimas mensagens de uma campanha.
+        "indexes": [{"fields": ["campanha_id", "-criado_em"]}, "criado_em"],
         "ordering": ["criado_em"],
     }
 

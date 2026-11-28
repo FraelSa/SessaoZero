@@ -16,6 +16,9 @@ from mongoengine.errors import ValidationError as MongoValidationError
 from .models import Usuario
 
 CHAVE_SESSAO = "usuario_id"
+# RNF02 - versão da sessão: se for diferente da do usuário (a senha mudou depois
+# do login), a sessão deixa de valer. Ver Usuario.encerrar_sessoes.
+CHAVE_VERSAO = "sessao_versao"
 
 # O Usuario da requisição é buscado uma vez e guardado no próprio `request`:
 # o middleware de fuso horário, os context processors e a view o consultam.
@@ -25,12 +28,20 @@ _SEM_CACHE = object()
 
 def fazer_login(request, usuario):
     request.session[CHAVE_SESSAO] = str(usuario.id)
+    request.session[CHAVE_VERSAO] = usuario.sessao_versao or 0
     request.__dict__.pop(_ATRIBUTO_CACHE, None)
 
 
 def fazer_logout(request):
     request.session.pop(CHAVE_SESSAO, None)
+    request.session.pop(CHAVE_VERSAO, None)
     request.__dict__.pop(_ATRIBUTO_CACHE, None)
+
+
+def sessao_vale(sessao, usuario):
+    """True se a sessão (a do Django ou a que o chat lê) ainda é a vigente do
+    usuário. Sessões antigas, sem o número, valem como versão 0."""
+    return sessao.get(CHAVE_VERSAO, 0) == (usuario.sessao_versao or 0)
 
 
 def usuario_atual(request):
@@ -57,6 +68,11 @@ def usuario_atual(request):
             # logado e limpa a sessão para não repetir o erro a cada request.
             request.session.pop(CHAVE_SESSAO, None)
             usuario = None
+
+    if usuario is not None and not sessao_vale(request.session, usuario):
+        # A senha mudou depois deste login: quem entrou antes precisa entrar de novo.
+        fazer_logout(request)
+        usuario = None
 
     request.__dict__[_ATRIBUTO_CACHE] = usuario
     return usuario

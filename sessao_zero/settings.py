@@ -52,6 +52,19 @@ if not DEBUG:
     SESSION_COOKIE_SECURE = True
     CSRF_COOKIE_SECURE = True
 
+    # RNF03 - tráfego sempre protegido. Quem chega por HTTP é levado para HTTPS e,
+    # depois do primeiro acesso seguro, o navegador passa a recusar HTTP para este
+    # site (HSTS). O prazo do HSTS começa em 1 hora de propósito: um erro de
+    # configuração se desfaz depressa. Com o site conferido, aumente em
+    # DJANGO_HSTS_SEGUNDOS (31536000 = 1 ano). Se o servidor ficar atrás de um
+    # proxy que não envia X-Forwarded-Proto, o redirecionamento vira um laço sem
+    # fim: nesse caso, DJANGO_SSL_REDIRECT=False.
+    SECURE_SSL_REDIRECT = config("DJANGO_SSL_REDIRECT", default=True, cast=bool)
+    # Os testes de saúde (Render, monitor de uptime) podem chegar por HTTP, direto
+    # ao serviço, e precisam receber a resposta sem ser redirecionados.
+    SECURE_REDIRECT_EXEMPT = [r"^saude/"]
+    SECURE_HSTS_SECONDS = config("DJANGO_HSTS_SEGUNDOS", default=3600, cast=int)
+
 # --------------------------------------------------------------------------
 # Apps instalados
 # --------------------------------------------------------------------------
@@ -107,6 +120,7 @@ TEMPLATES = [
                 "django.contrib.messages.context_processors.messages",
                 "accounts.context_processors.usuario_logado",
                 "notificacoes.context_processors.notificacoes_nao_lidas",
+                "moderacao.context_processors.moderacao_no_menu",
                 "core.context_processors.versao_css",
             ],
         },
@@ -119,18 +133,26 @@ ASGI_APPLICATION = "sessao_zero.asgi.application"
 # --------------------------------------------------------------------------
 # Django Channels (chat em tempo real, WebSockets)
 # --------------------------------------------------------------------------
-# InMemoryChannelLayer é suficiente para desenvolvimento (1 processo só).
-# Em produção, com mais de um processo/worker rodando, troque por Redis:
+# Sem REDIS_URL, as mensagens do chat passam pela memória do próprio processo
+# (InMemoryChannelLayer): basta para desenvolvimento e para um servidor só, mas,
+# com dois ou mais processos ou instâncias, quem está num processo não receberia
+# as mensagens de quem está em outro.
 #
-# CHANNEL_LAYERS = {
-#     "default": {
-#         "BACKEND": "channels_redis.core.RedisChannelLayer",
-#         "CONFIG": {"hosts": [config("REDIS_URL", default="redis://localhost:6379")]},
-#     }
-# }
-CHANNEL_LAYERS = {
-    "default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}
-}
+# RNF05 - para crescer além de um processo, defina REDIS_URL (ex.: o endereço do
+# "Key Value" do Render, redis://...). As mensagens passam a circular pelo Redis e
+# qualquer número de processos conversa entre si. Nada mais muda no código.
+REDIS_URL = config("REDIS_URL", default="")
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        "default": {
+            "BACKEND": "channels_redis.core.RedisChannelLayer",
+            # Mensagens não entregues em 10 s são descartadas, e cada canal guarda
+            # no máximo 200: um cliente lento ou parado não enche a memória do Redis.
+            "CONFIG": {"hosts": [REDIS_URL], "expiry": 10, "capacity": 200},
+        }
+    }
+else:
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
 # --------------------------------------------------------------------------
 # Banco de dados relacional (apenas para apps internos do Django)
@@ -155,7 +177,19 @@ SESSION_ENGINE = "django.contrib.sessions.backends.signed_cookies"
 MONGO_DB_NAME = config("MONGO_DB_NAME", default="sessao_zero")
 MONGO_URI = config("MONGO_URI", default="mongodb://localhost:27017")
 
-connect(db=MONGO_DB_NAME, host=MONGO_URI, alias="default")
+# RNF01 / RNF06 - tempos limite. Sem eles, o PyMongo espera 30 segundos por um
+# servidor que não responde, e cada pessoa que abre o site nesse intervalo fica com
+# a página pendurada. Com eles, a requisição falha rápido (a pessoa vê a página
+# de instabilidade, 503) e o teste /saude/banco/ avisa que o banco está fora do ar.
+# O pool limita as conexões abertas com o Atlas, cujo plano gratuito aceita 500 no total.
+MONGO_OPCOES = {
+    "serverSelectionTimeoutMS": config("MONGO_TEMPO_SELECAO_MS", default=5000, cast=int),
+    "connectTimeoutMS": config("MONGO_TEMPO_CONEXAO_MS", default=5000, cast=int),
+    "socketTimeoutMS": config("MONGO_TEMPO_RESPOSTA_MS", default=20000, cast=int),
+    "maxPoolSize": config("MONGO_CONEXOES_MAX", default=50, cast=int),
+}
+
+connect(db=MONGO_DB_NAME, host=MONGO_URI, alias="default", **MONGO_OPCOES)
 
 # --------------------------------------------------------------------------
 # Validação de senha (usada pelos helpers de hash em accounts/models.py)
@@ -183,7 +217,8 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
     "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedStaticFilesStorage"},
+    # RNF01 - nomes com resumo e cache de longa duração (ver core/armazenamento.py).
+    "staticfiles": {"BACKEND": "core.armazenamento.ArmazenamentoDeEstaticos"},
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -255,3 +290,16 @@ SITE_URL = config("SITE_URL", default="http://127.0.0.1:8000")
 # RNF03 - e-mail para onde as pessoas escrevem sobre os seus dados (aparece na
 # Política de Privacidade). Deixe em branco se ainda não houver um.
 CONTATO_PRIVACIDADE = config("CONTATO_PRIVACIDADE", default="")
+
+# RF08 - senha do endereço /notificacoes/lembretes/, que um agendador externo
+# chama de hora em hora para enviar os lembretes de sessão (o plano gratuito do
+# Render não tem cron). Vazia, o endereço fica desligado. Gere um valor longo e
+# aleatório, por exemplo: python -c "import secrets; print(secrets.token_urlsafe(32))"
+LEMBRETES_TOKEN = config("LEMBRETES_TOKEN", default="")
+
+# RNF04 - e-mails (separados por vírgula) de quem pode revisar o conteúdo que a
+# moderação barrou, no painel /moderacao/. Vazio, ninguém tem acesso. O e-mail
+# precisa ser o da conta: se o moderador trocar de e-mail, atualize esta lista.
+MODERADORES_EMAILS = [
+    email.strip().lower() for email in config("MODERADORES_EMAILS", default="", cast=Csv()) if email.strip()
+]

@@ -11,6 +11,7 @@ from django.core.exceptions import ValidationError
 from campanhas.models import SISTEMAS_DA_LISTA
 from core.horario import FUSOS_HORARIOS
 
+from . import limite_login
 from .avatares import AVATARES_PRONTOS
 from .imagens import processar_foto
 from .models import Usuario
@@ -183,10 +184,35 @@ class ReenviarConfirmacaoForm(forms.Form):
     email = forms.EmailField(label="E-mail do cadastro")
 
 
-class PerfilForm(forms.Form):
-    """Escolha do avatar: um desenho pronto, as iniciais do nome, a foto já
-    enviada, ou uma foto nova (que tem prioridade sobre a escolha)."""
+BIO_MAX_CARACTERES = 500
 
+
+class CampoTextoLongo(forms.CharField):
+    """CharField para <textarea>: o navegador envia cada quebra de linha como
+    dois caracteres (CR+LF) mas conta um só no `maxlength`; sem normalizar, um
+    texto que cabia na tela seria recusado aqui por "passar do limite"."""
+
+    def to_python(self, value):
+        valor = super().to_python(value)
+        return valor.replace("\r\n", "\n").replace("\r", "\n") if valor else valor
+
+
+class PerfilForm(forms.Form):
+    """Perfil: a biografia e a escolha do avatar (um desenho pronto, as iniciais
+    do nome, a foto já enviada, ou uma foto nova, que tem prioridade sobre a
+    escolha)."""
+
+    # RF01 - biografia, mostrada no perfil público; passa pela moderação (RNF04).
+    bio = CampoTextoLongo(
+        label="Biografia",
+        required=False,
+        max_length=BIO_MAX_CARACTERES,
+        widget=forms.Textarea(attrs={"rows": 4, "maxlength": BIO_MAX_CARACTERES}),
+        help_text=(
+            "Opcional. Conte como você joga e o que procura em uma mesa. Aparece no seu "
+            f"perfil público e passa pela mesma moderação dos comentários (até {BIO_MAX_CARACTERES} caracteres)."
+        ),
+    )
     avatar = forms.ChoiceField(
         choices=[("iniciais", "Iniciais"), *AVATARES_PRONTOS, ("foto", "Minha foto")],
         widget=forms.RadioSelect,
@@ -219,6 +245,18 @@ class PerfilForm(forms.Form):
         return dados
 
 
+def conferir_senha_atual(usuario, senha, mensagem):
+    """RNF02 - confere a senha de quem já está logado respeitando o limite de
+    tentativas (um cookie roubado não serviria para adivinhar a senha)."""
+    try:
+        confere = limite_login.conferir_senha(usuario, senha)
+    except limite_login.TentativasEsgotadas as erro:
+        raise ValidationError(str(erro))
+    if not confere:
+        raise ValidationError(mensagem)
+    return senha
+
+
 class AlterarSenhaForm(forms.Form):
     # RF01 - editar a conta: trocar a senha estando logado
     senha_atual = forms.CharField(
@@ -233,10 +271,9 @@ class AlterarSenhaForm(forms.Form):
         self.usuario = usuario
 
     def clean_senha_atual(self):
-        senha = self.cleaned_data["senha_atual"]
-        if not self.usuario.checar_senha(senha):
-            raise ValidationError("A senha atual não confere.")
-        return senha
+        return conferir_senha_atual(
+            self.usuario, self.cleaned_data["senha_atual"], "A senha atual não confere."
+        )
 
     def clean_nova_senha(self):
         senha = self.cleaned_data["nova_senha"]
@@ -252,6 +289,53 @@ class AlterarSenhaForm(forms.Form):
         return dados
 
 
+class AlterarUsernameForm(forms.Form):
+    # RF01 - editar a conta: trocar o nome de usuário
+    novo_username = forms.CharField(label="Novo nome de usuário", min_length=3, max_length=30)
+
+    def __init__(self, *args, usuario, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+
+    def clean_novo_username(self):
+        novo = self.cleaned_data["novo_username"].strip()
+        if novo == self.usuario.username:
+            raise ValidationError("Esse já é o seu nome de usuário.")
+        # Mesma regra do cadastro: cadastros ainda não confirmados não seguram o nome.
+        if Usuario.objects(
+            username=novo, id__ne=self.usuario.id, aguardando_confirmacao__ne=True
+        ).first():
+            raise ValidationError("Esse nome de usuário já está em uso.")
+        return novo
+
+
+class AlterarEmailForm(forms.Form):
+    # RF01 - editar a conta: trocar o e-mail. Pede a senha (o e-mail é o login e
+    # o destino da recuperação de conta) e só vale depois de confirmado por link.
+    novo_email = forms.EmailField(label="Novo e-mail")
+    senha_atual = forms.CharField(
+        label="Senha atual",
+        widget=forms.PasswordInput(attrs={"autocomplete": "current-password"}),
+    )
+
+    def __init__(self, *args, usuario, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.usuario = usuario
+
+    def clean_novo_email(self):
+        novo = self.cleaned_data["novo_email"].strip().lower()
+        if novo == self.usuario.email:
+            raise ValidationError("Esse já é o e-mail da sua conta.")
+        if Usuario.objects(email=novo, id__ne=self.usuario.id, aguardando_confirmacao__ne=True).first():
+            raise ValidationError("Já existe uma conta com esse e-mail.")
+        return novo
+
+    def clean_senha_atual(self):
+        return conferir_senha_atual(
+            self.usuario, self.cleaned_data["senha_atual"], "A senha atual não confere."
+        )
+
+
 class ExcluirContaForm(forms.Form):
     # RF01 - excluir a conta, pedindo a senha e uma confirmação explícita
     senha = forms.CharField(label="Sua senha", widget=forms.PasswordInput)
@@ -264,7 +348,4 @@ class ExcluirContaForm(forms.Form):
         self.usuario = usuario
 
     def clean_senha(self):
-        senha = self.cleaned_data["senha"]
-        if not self.usuario.checar_senha(senha):
-            raise ValidationError("Senha incorreta.")
-        return senha
+        return conferir_senha_atual(self.usuario, self.cleaned_data["senha"], "Senha incorreta.")

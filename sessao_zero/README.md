@@ -140,6 +140,14 @@ Rotas disponíveis (prefixo `/contas/`):
 | `/contas/logout/` | sair | — |
 | `/contas/recuperar-senha/` | pedir link de redefinição | RF04 |
 | `/contas/redefinir-senha/<token>/` | escolher nova senha | RF04 |
+| `/contas/perfil/` | editar a biografia (com moderação) e o avatar | RF01 |
+| `/contas/conta/` | trocar nome de usuário, e-mail (com link de confirmação) e senha | RF01 |
+| `/contas/confirmar-novo-email/<token>/` | confirmar o e-mail novo (link enviado a ele) | RF01 |
+
+Nome de usuário e e-mail são copiados em várias coleções (campanhas,
+inscrições, comentários, chat, avaliações, avisos). `accounts/identidade.py`
+acerta todas as cópias na troca; leia o comentário no topo do arquivo antes de
+mexer nele ou de criar um campo novo que guarde um desses dois valores.
 
 Em desenvolvimento, o e-mail de redefinição de senha não é enviado de
 verdade: ele aparece impresso no terminal onde o `runserver` está rodando
@@ -169,7 +177,10 @@ Rotas disponíveis (prefixo `/campanhas/`):
 | `/campanhas/<id>/` | ver detalhes, inscrever-se e comentar | RF02, RF06, RF08 |
 | `/campanhas/<id>/editar/` | editar (só o mestre) | RF02 |
 | `/campanhas/<id>/excluir/` | excluir, com confirmação (só o mestre) | RF02 |
-| `/campanhas/<id>/inscrever/` | inscrever o usuário logado (respeita vagas) | RF06 |
+| `/campanhas/<id>/inscrever/` | inscrever o usuário logado (respeita vagas; recusa mesa encerrada) | RF07 |
+| `/campanhas/<id>/sair/` | o jogador cancela a inscrição, com confirmação | RF07 |
+| `/campanhas/<id>/encerrar/` | o mestre encerra a campanha, com confirmação | RF02 |
+| `/campanhas/<id>/reabrir/` | o mestre reabre uma campanha encerrada | RF02 |
 | `/campanhas/<id>/comentar/` | adicionar comentário | RF08 |
 
 Regras já tratadas nas views: só o mestre que criou a campanha pode
@@ -208,7 +219,30 @@ Novo app `notificacoes/`, com o model `Notificacao` (coleção
 - o **mestre edita** título, sinopse, sistema ou número de vagas —
   notifica os jogadores inscritos;
 - **alguém se inscreve** numa campanha — notifica o mestre;
-- **alguém comenta** numa campanha — notifica o mestre.
+- **alguém comenta** numa campanha — notifica o mestre;
+- **a campanha é excluída, encerrada ou reaberta** — notifica os inscritos;
+- **um jogador sai da mesa** — notifica o mestre;
+- **a próxima sessão está a menos de 24 horas** — lembrete para o mestre e os
+  inscritos (ver abaixo).
+
+### Lembretes de sessão
+
+`notificacoes/lembretes.py` envia o lembrete (sininho e, se a pessoa não
+desligou, e-mail), com o horário no fuso de cada pessoa. Cada sessão é lembrada
+uma vez só, inclusive nas campanhas que se repetem, e campanhas encerradas ou
+sem data são ignoradas. Quem dispara é um agendador externo, de hora em hora,
+porque o plano gratuito do Render não tem cron:
+
+```bash
+python manage.py enviar_lembretes_sessao            # envia
+python manage.py enviar_lembretes_sessao --simular  # só mostra quem seria avisado
+python manage.py enviar_lembretes_sessao --horas 48 # muda a antecedência (padrão 24)
+```
+
+No site publicado, o agendador chama `POST /notificacoes/lembretes/` com o
+cabeçalho `Authorization: Bearer <LEMBRETES_TOKEN>`. Sem a variável
+`LEMBRETES_TOKEN`, esse endereço responde 404. O passo a passo está no
+`DEPLOY.md`.
 
 Rota: `/notificacoes/` (usuário logado) — lista as notificações e marca
 todas como lidas ao abrir. O menu mostra um contador de não lidas. Por
@@ -262,27 +296,173 @@ E troque `CHANNEL_LAYERS` em `settings.py` de `InMemoryChannelLayer`
 (só funciona dentro de 1 processo) para Redis, como o comentário no
 próprio arquivo explica.
 
-## Moderação de conteúdo em tempo real (já implementado — RNF04)
+## Moderação de conteúdo em tempo real (já implementado, RNF04)
 
-Novo app `moderacao/`, com:
+App `moderacao/`:
 
-- `moderacao/filtros.py` — função `moderar_texto(texto)`, que checa o
-  texto contra uma lista pequena de termos proibidos (exemplo — em
-  produção o ideal é uma lista curada maior e/ou um serviço externo tipo
-  a Perspective API), além de heurísticas simples: texto todo em
-  maiúsculas ("grito") e excesso de links (spam).
-- `moderacao/models.py` — `ConteudoBloqueado`, um log de toda tentativa
-  bloqueada (quem tentou, o texto, o motivo e a origem), pra dar pra
-  auditar o filtro depois.
+- `filtros.py`: `moderar_texto`, `moderar_sinopse` e `moderar_nome`. Comparam
+  palavras inteiras (`burro` não barra `aburrido`), ignoram maiúsculas, acentos
+  e letras repetidas, e enxergam números e símbolos no lugar de letras
+  (`1d10t4`) e letras separadas (`i d i o t a`). Barram também texto quase todo
+  em caixa alta e mais de 1 link no texto (mais de 3 na sinopse). Usos legítimos
+  ficam em `EXCECOES` (`burro de carga`).
+- `termos_proibidos.txt`: a lista de termos, um por linha. Quem cuida da
+  comunidade ajusta o arquivo sem mexer em código. A lista é pequena e
+  conservadora de propósito (ofensas a pessoas e a grupos, sem palavrão solto,
+  porque mesas de RPG têm classificação indicativa e temas adultos) e precisa
+  de curadoria.
+- `models.py`: `ConteudoBloqueado` guarda cada tentativa barrada (e-mail do
+  autor, texto, motivo e origem) por 180 dias, quando o MongoDB a apaga sozinho
+  (índice TTL).
+- `/moderacao/`: painel de revisão, só para moderadores. Filtra por estado
+  (pendentes, revisados) e por origem, permite marcar cada bloqueio como
+  "correto" ou "falso positivo" (um falso positivo aponta um termo a corrigir)
+  e destaca quem foi barrado 3 vezes ou mais nos últimos 7 dias. Moderador é
+  quem tem o e-mail em `MODERADORES_EMAILS` (separados por vírgula); para as
+  demais pessoas a página responde 404.
 
-Está plugado em dois lugares, em **tempo real**, antes de qualquer coisa
-ser salva ou mostrada a outros usuários:
+A moderação roda antes de qualquer coisa ser salva ou mostrada, em: chat (a
+mensagem barrada não é salva nem distribuída, e só quem enviou vê o aviso),
+comentários, avaliações, nome de usuário (cadastro e troca), biografia, e
+título, sinopse e sistema próprio das campanhas.
 
-- no **chat** (`chat/consumers.py`) — se bloqueado, a mensagem não é
-  salva nem distribuída para o grupo; só quem enviou recebe o aviso;
-- nos **comentários de campanha** (`campanhas/views.py`,
-  `comentar_campanha`) — se bloqueado, mostra a mensagem de erro e não
-  salva o comentário.
+Limites: é um filtro por palavras e padrões, não entende contexto, e as fotos
+de perfil não passam por moderação de conteúdo (só são validadas, recortadas e
+reduzidas). Para uma comunidade grande, o caminho é uma lista curada por
+pessoas e/ou um serviço especializado (por exemplo, a Perspective API): o resto
+do sistema só depende de `moderar_texto` e `moderar_nome`.
+
+## Segurança e privacidade (já implementado, RNF02 e RNF03)
+
+- **Senhas:** hash PBKDF2-SHA256 do Django. Quem entra com um hash mais antigo
+  tem o hash refeito no padrão atual na hora do login. O Argon2 não foi
+  adotado de propósito: ele consome muita memória por tentativa, e o plano
+  grátis do Render tem 512 MB.
+- **Limite de tentativas** (`accounts/limite_login.py`): 5 senhas erradas em 15
+  minutos para o mesmo e-mail bloqueiam novas tentativas até as mais antigas
+  saírem da janela, sem sequer calcular o hash. Vale para o login e para os
+  formulários que pedem a senha atual (trocar a senha, trocar o e-mail, excluir
+  a conta). Não há limite por IP de propósito: atrás do proxy do Render o IP
+  vem de um cabeçalho que o cliente consegue forjar. Consequências conhecidas:
+  quem sabe o e-mail de alguém pode bloqueá-lo por alguns minutos (a
+  recuperação de senha continua valendo), e o limite não impede testar a mesma
+  senha em muitos e-mails.
+- **Links enviados por e-mail** (confirmação de cadastro, recuperação de senha e
+  troca de e-mail): o código só existe no e-mail, e o banco guarda apenas o
+  SHA-256 dele (`accounts/tokens.py`). Quem lê o banco não consegue montar um
+  link válido. Links pedidos antes desta versão deixam de funcionar; é só pedir
+  de novo.
+- **Sessões:** cada conta tem um número de versão de sessão
+  (`Usuario.sessao_versao`). Trocar a senha o aumenta e derruba as outras
+  sessões abertas (cookie roubado inclusive), no site e no chat. Cookies
+  emitidos antes desta versão continuam valendo até a próxima troca de senha.
+- **HTTPS:** com `DJANGO_DEBUG=False`, o site redireciona HTTP para HTTPS (menos
+  em `/saude/`), marca os cookies como seguros e envia o HSTS. O prazo do HSTS
+  começa em 1 hora (`DJANGO_HSTS_SEGUNDOS`): depois de confirmar que tudo
+  funciona por HTTPS, aumente (31536000 = 1 ano). `DJANGO_SSL_REDIRECT=False`
+  desliga o redirecionamento atrás de um proxy que não envia
+  `X-Forwarded-Proto`.
+- **LGPD:** Política de Privacidade em `/privacidade/` (texto em
+  `core/templates/core/privacidade.html`; troque `core/politica.VERSAO` quando o
+  texto mudar de verdade), com aceite no cadastro; exportação dos dados
+  (`/contas/exportar/`) e exclusão da conta; prazos de guarda aplicados por
+  índices TTL do MongoDB (avisos 90 dias, textos barrados 180 dias, tentativas
+  de login 1 hora, cadastros não confirmados 24 horas); e-mail mascarado nos
+  logs; `/status/mongo/` só para moderadores fora do modo de desenvolvimento.
+  O texto da política precisa de revisão jurídica antes de valer como
+  conformidade, em especial os trechos sobre crianças e adolescentes (art. 14),
+  transferência internacional de dados e o papel de cada prestador de serviço.
+
+## Desempenho e escala (já implementado, RNF01 e RNF05)
+
+- **Listas em páginas** (`core/paginacao.py`): campanhas (12 por página), avisos
+  (30) e o painel de moderação (25). A página da campanha mostra os 100
+  comentários mais novos (o limite por campanha é 1000).
+- **Consultas leves:** as listas não carregam os comentários nem os campos que
+  não usam (`.exclude("comentarios")`, `.only(...)`); há índices compostos para
+  as buscas mais comuns; a recomendação olha só as 300 campanhas mais recentes.
+- **Gravações atômicas:** inscrição, saída da mesa e comentário usam uma
+  atualização condicional do MongoDB, então duas pessoas pegando a última vaga
+  ao mesmo tempo não passam do limite.
+- **Chat:** cada conexão pode enviar até 5 mensagens em 10 segundos. O limite é
+  por conexão, não por pessoa.
+- **Arquivos estáticos:** o WhiteNoise serve CSS, fontes e imagens com nome que
+  muda quando o conteúdo muda e cache de longa duração (10 anos, imutável), comprimidos (gzip). As fontes de
+  letra (Public Sans e Young Serif, licença OFL) são do próprio site: nenhuma
+  página pede nada ao Google.
+- **Banco:** tempos limite de seleção e de conexão de 5 segundos e de resposta de
+  20 segundos, e no máximo 50 conexões abertas por processo. Uma página não
+  fica pendurada esperando um banco que não responde.
+
+Medir é outra coisa: nada disso prova que o site abre em até 2 segundos nem
+que aguenta 5.000 pessoas ao mesmo tempo. Para saber, use o teste de carga
+(abaixo) contra o site publicado.
+
+## Disponibilidade e monitoramento (já implementado, RNF05 e RNF06)
+
+- `/saude/`: responde `{"estado": "ok"}` sem consultar o banco. É o endereço que
+  o Render confere a cada poucos segundos (`healthCheckPath` no `render.yaml`) e
+  que decide reiniciar o serviço quando falha. É de propósito independente do
+  MongoDB: reiniciar o site não conserta um banco fora do ar.
+- `/saude/banco/`: faz um `ping` no MongoDB e responde 200, ou 503 com
+  `Retry-After` quando ele não responde (sem detalhes do erro). É o endereço
+  para o monitor externo (veja `DEPLOY.md`).
+- **Páginas de erro:** quando a causa de um erro é a conexão com o MongoDB, a
+  pessoa vê uma página de instabilidade (503, com o pedido para tentar de novo
+  em instantes) em vez de um erro genérico. Os modelos `templates/503.html` e
+  `templates/500.html` não dependem do banco.
+- **Chat em vários processos:** por padrão as mensagens do chat circulam pela
+  memória do processo, o que só funciona com 1 processo. Defina `REDIS_URL` (por
+  exemplo, o "Key Value" do Render, como mostra o bloco comentado do
+  `render.yaml`) e elas passam a circular pelo Redis, liberando rodar mais de um
+  processo. O código não muda. O plano grátis do Render só tem uma instância,
+  então o Redis passa a fazer diferença num plano pago.
+
+O que o código não garante: o plano grátis do Render dorme depois de 15 minutos
+sem acesso (a primeira visita leva cerca de 1 minuto), tem 0,1 CPU e 512 MB, e o
+Atlas M0 tem limites de conexões e de operações por segundo. Nenhum dos dois
+tem garantia de disponibilidade (SLA). 99,9% de disponibilidade no ano
+(cerca de 8 horas e 45 minutos de parada) e 5.000 usuários simultâneos pedem
+planos pagos, mais de um processo, Redis e um teste de carga de verdade.
+
+## Teste de carga (RNF01 e RNF05)
+
+Simula várias pessoas navegando ao mesmo tempo e mede quanto cada página demora
+(só biblioteca padrão do Python). Rode do seu computador, contra o site
+publicado:
+
+```bash
+python manage.py teste_de_carga https://seusite.onrender.com --usuarios 200 --duracao 60
+# com login: crie antes, no site, uma conta de teste já confirmada e use o e-mail e a senha dela
+python manage.py teste_de_carga https://seusite.onrender.com --usuarios 100 --entrar teste@exemplo.com:SenhaDeTeste-123
+```
+
+O relatório mostra, por página, a mediana, o p95, o p99 e o máximo, as falhas e a
+vazão, e o comando termina com erro se alguma página passa de 2 segundos (p95)
+ou se mais de 1% das requisições falha. O primeiro acesso ("partida a frio") é
+medido à parte, porque no plano grátis o site pode estar dormindo. Com
+`--entrar`, cada usuário simulado faz o login (o envio da senha aparece como
+`POST /contas/login/`) e passa a visitar também as páginas de quem está logado.
+O login merece atenção: o hash da senha é lento de propósito, e num servidor com
+pouca CPU, como o plano grátis, ele pode passar de 2 segundos.
+
+Limites: o tempo inclui a rede entre o seu computador e o servidor, e um
+computador comum não gera milhares de usuários simultâneos (acima de uns 500, o
+gargalo passa a ser a máquina que testa). Para 5.000, use uma ferramenta
+distribuída (k6, Locust) ou várias máquinas. Rode só contra o seu próprio site.
+
+## Variáveis de ambiente (novas)
+
+| Variável | Padrão | Para quê |
+| --- | --- | --- |
+| `MODERADORES_EMAILS` | vazio | e-mails (separados por vírgula) de quem acessa `/moderacao/` e `/status/mongo/` |
+| `DJANGO_HSTS_SEGUNDOS` | `3600` | prazo do HSTS em produção; suba para `31536000` depois de validar o HTTPS |
+| `DJANGO_SSL_REDIRECT` | `True` | redireciona HTTP para HTTPS em produção |
+| `MONGO_TEMPO_SELECAO_MS` | `5000` | tempo máximo para achar um servidor MongoDB |
+| `MONGO_TEMPO_CONEXAO_MS` | `5000` | tempo máximo para abrir a conexão |
+| `MONGO_TEMPO_RESPOSTA_MS` | `20000` | tempo máximo esperando uma resposta |
+| `MONGO_CONEXOES_MAX` | `50` | conexões abertas por processo |
+| `REDIS_URL` | vazio | endereço do Redis; com ele, o chat funciona com vários processos |
 
 ## Confirmação de e-mail, avisos por e-mail e modo noturno
 
@@ -462,23 +642,22 @@ Numa passada de revisão geral do código, encontrei e corrigi:
 
 ## O que ainda fica de fora (lacunas conhecidas)
 
-- **RNF07 (app mobile Android/iOS)** — este projeto é só a aplicação web
-  em Django; não cobre um app nativo/mobile. Precisaria de um projeto
-  separado (nativo, ou um wrapper tipo React Native/Flutter consumindo
-  uma API, ou no mínimo transformar isso num PWA).
-- **RNF03 (conformidade com a LGPD)** — hoje não há fluxo de exportação
-  ou exclusão dos próprios dados pelo usuário, nem política de
-  privacidade. Vale adicionar antes de considerar o RNF cumprido de
-  verdade.
-- **Avaliações de jogadores e mestres** — citadas no corpo do artigo,
-  mas nunca chegaram a virar um RF numerado na tabela; não implementado.
-- Painel para revisar o log de `ConteudoBloqueado` (hoje só fica salvo
-  no banco, sem uma tela dedicada).
-- Trocar `TERMOS_PROIBIDOS` por uma lista mais completa/curada ou por
-  um serviço externo de moderação.
-- **RNF01/05/06** (tempo de carregamento, 5.000 usuários simultâneos,
-  uptime 99,9%) dependem de infraestrutura (hospedagem, cache, Redis
-  para o `CHANNEL_LAYERS`, monitoramento) e de testes de carga — não são
-  coisas que o código sozinho garante, mas a arquitetura escolhida
-  (MongoDB + Channels/Redis) foi pensada para permitir escalar nessa
-  direção.
+- **RNF07 (app mobile Android/iOS):** este projeto é só a aplicação web em
+  Django; não cobre um app nativo. Precisaria de um projeto separado (nativo, ou
+  um wrapper como React Native/Flutter consumindo uma API, ou no mínimo
+  transformar isso num PWA).
+- **RNF01, RNF05 e RNF06 (carregamento em 2 s, 5.000 usuários simultâneos,
+  disponibilidade de 99,9% no ano):** o código faz a sua parte (páginas leves,
+  gravações atômicas, tempos limite, teste de saúde, páginas de erro, Redis
+  opcional, teste de carga), mas o resultado depende da infraestrutura e de
+  medição. No plano grátis o site dorme e não há SLA. Falta rodar o teste de
+  carga contra o site publicado, contratar planos pagos e acompanhar a
+  disponibilidade com um monitor externo.
+- **RNF03 (LGPD):** há política de privacidade, aceite, exportação, exclusão e
+  prazos de guarda. Falta revisão jurídica do texto (crianças e adolescentes,
+  transferência internacional, papel dos prestadores de serviço), e o aplicativo
+  não pede nem verifica a idade de quem se cadastra.
+- **RNF04 (moderação):** só texto. Imagens (a foto de perfil) não passam por
+  análise de conteúdo, e a lista de termos é pequena e precisa de curadoria.
+- **RNF02 (senhas):** não há segundo fator de autenticação, e o limite de
+  tentativas é por e-mail, não por IP.
