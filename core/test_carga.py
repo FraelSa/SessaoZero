@@ -138,6 +138,11 @@ class ComandoTests(SimpleTestCase):
 class TesteContraUmServidorDeVerdadeTests(LiveServerTestCase):
     """Sobe o site de verdade (com o MongoDB simulado) e roda o teste contra ele."""
 
+    # IPv4 explícito: no Windows, "localhost" tenta primeiro o IPv6 (::1), que o
+    # servidor de teste não escuta, e cada requisição espera ~2 s antes de cair
+    # no IPv4. Isso estouraria o limite de 2 s do RNF01 sem ser culpa do site.
+    host = "127.0.0.1"
+
     @classmethod
     def setUpClass(cls):
         disconnect()
